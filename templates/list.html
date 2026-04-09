@@ -1,0 +1,8 @@
+<h1>Latin Works</h1>
+<ul>
+    {% for w in works %}
+<li>
+<a href="{% url 'work_redirect' w.id %}">{{ w.author }}: {{ w.title }}</a> 
+</li>
+    {% endfor %}
+</ul>

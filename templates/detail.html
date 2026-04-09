@@ -1,0 +1,21 @@
+<h2>{{ work.author }} - {{ work.title }}</h2>
+<p>Current Section: {{ current_path }}</p>
+
+<div class="text-content">
+    {% for s in segments %}
+    <p><sup>{{ s.n_value }}</sup> {{ s.text }}</p>
+    {% endfor %}
+</div>
+
+<hr>
+<nav class="pagigation">
+    {% if prev_path %}
+    <a href="/work/{{ work.id }}/{{ prev_path }}/">← Previous ({{ prev_path }})</a>
+    {% endif %}
+    
+    | 
+    
+    {% if next_path %}
+    <a href="/work/{{ work.id }}/{{ next_path }}/">Next ({{ next_path }}) →</a>
+    {% endif %}
+</nav>
