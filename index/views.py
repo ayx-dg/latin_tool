@@ -1,12 +1,14 @@
 import hashlib
 import json
+import os
 import google.generativeai as genai
 from django.shortcuts import render, get_object_or_404
 from .models import Works, Contents, GlossCache
+from django.conf import settings # 导入 settings
 
 # 配置 Gemini
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
-model = genai.GenerativeModel('gemini-1.5-flash')
+genai.configure(api_key=settings.GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 def get_or_create_gloss(latin_text):
     # 1. 计算哈希值
@@ -56,6 +58,10 @@ def work_detail(request, work_id, path):
     # 获取当前 path 的所有行
     segments = Contents.objects.filter(work_id=work_id, path=path).order_by('global_order')
     
+    # 获取全文用于标注（也可以逐句标注，这里演示合并标注）
+    full_text = " ".join([s.text for s in segments])
+    gloss_data = get_or_create_gloss(full_text)
+
     # 获取该作品的所有唯一 path，按 global_order 排序，用于翻页
     all_paths = list(Contents.objects.filter(work_id=work_id)
                      .values_list('path', flat=True)
@@ -70,6 +76,7 @@ def work_detail(request, work_id, path):
     return render(request, 'detail.html', {
         'work': work,
         'segments': segments,
+        'gloss_data': gloss_data,
         'prev_path': prev_path,
         'next_path': next_path,
         'current_path': path
@@ -84,3 +91,18 @@ def work_redirect(request, work_id):
         # 重定向到带 path 的完整 URL
         return redirect('work_detail', work_id=work_id, path=first_content.path)
     return render(request, '404.html', {'message': '作品内容为空'})
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt # 方便开发调试
+def api_get_gloss(request):
+    # 允许 GET 请求带文本，或 POST 请求带文本
+    text = request.GET.get('text') or request.POST.get('text')
+    if not text:
+        return JsonResponse({'error': 'No text'}, status=400)
+    
+    # 调用你之前的 get_or_create_gloss 逻辑
+    gloss_data = get_or_create_gloss(text)
+    
+    return JsonResponse({'gloss': gloss_data})

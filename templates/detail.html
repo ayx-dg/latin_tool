@@ -1,21 +1,69 @@
-<h2>{{ work.author }} - {{ work.title }}</h2>
-<p>Current Section: {{ current_path }}</p>
-
-<div class="text-content">
-    {% for s in segments %}
-    <p><sup>{{ s.n_value }}</sup> {{ s.text }}</p>
-    {% endfor %}
-</div>
-
-<hr>
-<nav class="pagigation">
-    {% if prev_path %}
-    <a href="/work/{{ work.id }}/{{ prev_path }}/">← Previous ({{ prev_path }})</a>
-    {% endif %}
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .gloss-container {
+            line-height: 4; /* 为多层标注留出空间 */
+            margin: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .word-box {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            margin-right: 12px;
+            vertical-align: top;
+            min-width: 50px;
+        }
+        .lat-w {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #b03a2e;
+            border-bottom: 2px solid #eee;
+            line-height: 1.5;
+        }
+        .mean-m {
+            font-size: 0.9em;
+            color: #2c3e50;
+            line-height: 1.2;
+        }
+        .gram-g {
+            font-size: 0.75em;
+            color: #7f8c8d;
+            font-style: italic;
+            line-height: 1.2;
+        }
+        .pagination { margin-top: 40px; padding: 20px; border-top: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>{{ work.author }}: {{ work.title }}</h1>
     
-    | 
-    
-    {% if next_path %}
-    <a href="/work/{{ work.id }}/{{ next_path }}/">Next ({{ next_path }}) →</a>
-    {% endif %}
-</nav>
+    <div class="gloss-container">
+        {% if gloss_data %}
+            {% for item in gloss_data %}
+            <div class="word-box">
+                <span class="lat-w">{{ item.w }}</span>
+                <span class="mean-m">{{ item.m }}</span>
+                <span class="gram-g">{{ item.g }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>{{ segments.0.text }} </p>
+            <p> (UNGLOSSED) </p>
+        {% endif %}
+    </div>
+
+    <nav class="pagination">
+        {% if prev_path %}
+            <a href="{% url 'work_detail' work.id prev_path %}">⬅️ 上一页 ({{ prev_path }})</a>
+        {% endif %}
+        | {{ current_path }} |
+        {% if next_path %}
+            <a href="{% url 'work_detail' work.id next_path %}">下一页 ({{ next_path }}) ➡️</a>
+        {% endif %}
+    </nav>
+</body>
+</html>
