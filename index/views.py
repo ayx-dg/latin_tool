@@ -1,52 +1,63 @@
 import hashlib
 import json
-import os
 import google.generativeai as genai
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 from .models import Works, Contents, GlossCache
-from django.conf import settings # 导入 settings
-
-# 配置 Gemini
+import logging
+# --- 配置区 ---
 genai.configure(api_key=settings.GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
+logger = logging.getLogger(__name__)
 
-def get_or_create_gloss(latin_text):
+def get_or_create_gloss(full_text):
+    """
+    核心业务逻辑：负责数据库缓存校验与 Gemini API 交互
+    """
+    if not full_text.strip():
+        return [], ""
+    print('get or create')
     # 1. 计算哈希值
-    text_hash = hashlib.md5(latin_text.encode('utf-8')).hexdigest()
-    
-    # 2. 尝试从数据库获取
+    text_hash = hashlib.md5(full_text.encode('utf-8')).hexdigest()
+
+    # 2. 缓存查询
     cached = GlossCache.objects.filter(text_hash=text_hash).first()
     if cached:
-        return cached.gloss_data
-
-    # 3. 缓存未命中，调用 Gemini
+        print('there is cache')
+#        logger.debug(cached.gloss_data)
+        return cached.gloss_data, text_hash
+    print('no cache')
+    # 3. 调用 API
     prompt = f"""
-    You are a Latin linguistics expert. Analyze the Latin text and provide a word-for-word gloss in JSON format.
-    Each item in the list must have:
-    "w": the original Latin word
-    "m": concise Chinese meaning
-    "g": grammatical analysis (case, number, gender, tense, person, etc. in Chinese)
-    
-    Text: {latin_text}
-    Return ONLY the JSON array.
+    Analyze the following Latin text and provide a word-for-word gloss in a JSON array. 
+    Each item: "w": Latin word, "m": Chinese meaning, "g": Grammar (Chinese). 
+    Text: {full_text}
+    Return ONLY JSON array.
     """
-    
+
     try:
+        print('trying')
         response = model.generate_content(
             prompt,
-            generation_config={"response_mime_type": "application/json"}
+            generation_config={"response_mime_type": "application/json"},
+            #request_options={"timeout": 20}
         )
-        gloss_result = json.loads(response.text)
-        
-        # 4. 存入数据库供下次使用
-        GlossCache.objects.create(text_hash=text_hash, gloss_data=gloss_result)
-        return gloss_result
+        gloss_data = json.loads(response.text)
+        print(response)        
+        # 4. 存入缓存
+        GlossCache.objects.create(text_hash=text_hash, gloss_data=gloss_data)
+#        logger.debug(gloss_data)
+        return gloss_data, text_hash
     except Exception as e:
+        print('fail')
         print(f"Gemini API Error: {e}")
-        return None
-# views.py
-from django.shortcuts import render, get_object_or_404
-from .models import Works, Contents
+        # 失败兜底
+        fallback = [{"w": w, "m": "解析失败", "g": ""} for w in full_text.split()]
+        return fallback, text_hash
+
+# --- 页面视图 ---
 
 def work_list(request):
     works = Works.objects.all()
@@ -55,54 +66,84 @@ def work_list(request):
 def work_detail(request, work_id, path):
     work = get_object_or_404(Works, id=work_id)
     
-    # 获取当前 path 的所有行
+    # 获取当前 path 的内容
     segments = Contents.objects.filter(work_id=work_id, path=path).order_by('global_order')
-    
-    # 获取全文用于标注（也可以逐句标注，这里演示合并标注）
     full_text = " ".join([s.text for s in segments])
-    gloss_data = get_or_create_gloss(full_text)
-
-    # 获取该作品的所有唯一 path，按 global_order 排序，用于翻页
-    all_paths = list(Contents.objects.filter(work_id=work_id)
-                     .values_list('path', flat=True)
-                     .distinct()
-                     .order_by('global_order'))
     
-    # 计算索引以获取上一个和下一个 path
-    current_index = all_paths.index(path)
-    prev_path = all_paths[current_index - 1] if current_index > 0 else None
-    next_path = all_paths[current_index + 1] if current_index < len(all_paths) - 1 else None
+    # 【修改重点】计算当前页面的哈希值，交给前端 JS
+    current_hash = hashlib.md5(full_text.encode('utf-8')).hexdigest()
 
+    # 翻页逻辑
+    from django.db.models import Min
+    all_paths = list(Contents.objects.filter(work_id=work_id)
+                 .values('path')
+                 .annotate(min_order=Min('global_order'))
+                 .order_by('min_order')
+                 .values_list('path', flat=True))
+    
+    print(all_paths)
+    try:
+        current_index = all_paths.index(path)
+        prev_path = all_paths[current_index - 1] if current_index > 0 else None
+        next_path = all_paths[current_index + 1] if current_index < len(all_paths) - 1 else None
+    except ValueError:
+        prev_path = next_path = None
+
+    # 改成json ， 只返回work detail
     return render(request, 'detail.html', {
         'work': work,
         'segments': segments,
-        'gloss_data': gloss_data,
+        'current_hash': current_hash,  # 传递给前端
         'prev_path': prev_path,
         'next_path': next_path,
-        'current_path': path
+        'current_path': path,
+        'work_id': work_id
     })
 
-from django.shortcuts import redirect
-
 def work_redirect(request, work_id):
-    # 找到该作品 global_order 最小（即最开头）的那一行
     first_content = Contents.objects.filter(work_id=work_id).order_by('global_order').first()
     if first_content:
-        # 重定向到带 path 的完整 URL
         return redirect('work_detail', work_id=work_id, path=first_content.path)
     return render(request, '404.html', {'message': '作品内容为空'})
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt # 方便开发调试
+# --- API 接口 ---
+@csrf_exempt
 def api_get_gloss(request):
-    # 允许 GET 请求带文本，或 POST 请求带文本
-    text = request.GET.get('text') or request.POST.get('text')
-    if not text:
-        return JsonResponse({'error': 'No text'}, status=400)
+    """
+    API 接口：利用现有 get_or_create_gloss 函数
+    通过 work_id 和 path 定位原文，获取标注
+    """
+    # 获取参数
+    work_id = request.GET.get('work_id')
+    path = request.GET.get('path')
+
+    # 1. 核心逻辑：必须有定位原文的依据
+    if not (work_id and path):
+        return JsonResponse({
+            'error': 'Missing parameters. Both work_id and path are required to locate text.'
+        }, status=400)
+
+    try:
+        # 2. 从 Contents 表中根据 work_id 和 path 获取原文
+        # 必须按 global_order 排序，否则拼出来的句子是乱序的，Gemini 无法理解语义
+        segments = Contents.objects.filter(work_id=work_id, path=path).order_by('global_order')
+        full_text = " ".join([s.text for s in segments])
     
-    # 调用你之前的 get_or_create_gloss 逻辑
-    gloss_data = get_or_create_gloss(text)
-    
-    return JsonResponse({'gloss': gloss_data})
+
+        # 3. 调用你已有的函数
+        # 该函数内部已经处理了：检查 GlossCache -> 调用 Gemini -> 存入 GlossCache
+        gloss_data, _ = get_or_create_gloss(full_text)
+
+        #logger.debug(gloss_data)
+        # 4. 返回 JSON
+        return JsonResponse({
+            'status': 'success',
+            'work_id': work_id,
+            'path': path,
+            'gloss': gloss_data
+        })
+
+    except Exception as e:
+        # 记录错误日志
+        print(f"API Error: {str(e)}")
+        return JsonResponse({'error': 'Internal server error processing gloss'}, status=500)

@@ -1,69 +1,225 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <title>{{ work.author }}: {{ work.title }}</title>
     <style>
-        .gloss-container {
-            line-height: 4; /* 为多层标注留出空间 */
-            margin: 20px;
-            padding: 20px;
-            background: #f9f9f9;
+        :root {
+            --popover-bg: #2c3e50;
+            --popover-text: #ffffff;
+            --accent-m: #ff9f43; /* 释义颜色 */
+            --accent-g: #bdc3c7; /* 语法颜色 */
+        }
+
+        body {
+            font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+            line-height: 1.8;
+            padding: 40px 20px;
+            background-color: #fdfdfd;
+        }
+
+        /* 正文容器 */
+        #latin-content {
+            max-width: 800px;
+            margin: 0 auto;
+            font-size: 1.4rem;
+            color: #333;
+            text-align: justify;
+        }
+
+        /* 1. 单词包装器：设为 inline 确保标点不位移 */
+        .word-wrapper {
+            position: relative;
+            display: inline; 
+            cursor: pointer;
+            transition: background 0.2s;
+            border-bottom: 1px solid transparent;
+        }
+
+        .word-wrapper:hover {
+            border-bottom: 1px dashed #ccc;
+        }
+
+        /* 2. 浮窗容器 */
+        .gloss-popover {
+            display: none; /* 默认隐藏 */
+            position: absolute;
+            bottom: 140%; /* 弹出在单词上方 */
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--popover-bg);
+            color: var(--popover-text);
+            padding: 8px 14px;
             border-radius: 8px;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            pointer-events: none; /* 防止遮挡点击 */
         }
-        .word-box {
-            display: inline-flex;
-            flex-direction: column;
+
+        /* 浮窗小箭头 */
+        .gloss-popover::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: var(--popover-bg) transparent transparent transparent;
+        }
+
+        /* 激活状态样式 */
+        .word-wrapper.active {
+            background-color: rgba(255, 159, 67, 0.15);
+            border-bottom: 1px solid var(--accent-m);
+        }
+
+        .word-wrapper.active .gloss-popover {
+            display: block;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, 5px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        .m-text { color: var(--accent-m); font-weight: bold; margin-right: 8px; }
+        .g-text { color: var(--accent-g); font-size: 0.85rem; }
+
+        /* 按钮样式 */
+        .controls { text-align: center; margin-bottom: 40px; }
+        #init-gloss-btn {
+            padding: 10px 24px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        pagination {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--nav-bg);
+            display: flex;
             align-items: center;
-            margin-right: 12px;
-            vertical-align: top;
-            min-width: 50px;
+            justify-content: space-between;
+            padding: 0 30px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            border-top: 1px solid #eee;
+            z-index: 2000;
         }
-        .lat-w {
-            font-weight: bold;
-            font-size: 1.2em;
-            color: #b03a2e;
-            border-bottom: 2px solid #eee;
-            line-height: 1.5;
-        }
-        .mean-m {
-            font-size: 0.9em;
-            color: #2c3e50;
-            line-height: 1.2;
-        }
-        .gram-g {
-            font-size: 0.75em;
-            color: #7f8c8d;
-            font-style: italic;
-            line-height: 1.2;
-        }
-        .pagination { margin-top: 40px; padding: 20px; border-top: 1px solid #ccc; }
     </style>
 </head>
 <body>
-    <h1>{{ work.author }}: {{ work.title }}</h1>
-    
-    <div class="gloss-container">
-        {% if gloss_data %}
-            {% for item in gloss_data %}
-            <div class="word-box">
-                <span class="lat-w">{{ item.w }}</span>
-                <span class="mean-m">{{ item.m }}</span>
-                <span class="gram-g">{{ item.g }}</span>
-            </div>
-            {% endfor %}
-        {% else %}
-            <p>{{ segments.0.text }} </p>
-            <p> (UNGLOSSED) </p>
-        {% endif %}
+
+    <div class="controls">
+        <button id="init-gloss-btn">加载原文分析</button>
     </div>
 
-    <nav class="pagination">
-        {% if prev_path %}
-            <a href="{% url 'work_detail' work.id prev_path %}">⬅️ 上一页 ({{ prev_path }})</a>
-        {% endif %}
-        | {{ current_path }} |
-        {% if next_path %}
-            <a href="{% url 'work_detail' work.id next_path %}">下一页 ({{ next_path }}) ➡️</a>
-        {% endif %}
+    <article id="latin-content" 
+             data-workid="{{ work.id }}" 
+             data-path="{{ current_path }}">
+        {% for s in segments %}{{ s.text }} {% endfor %}
+    </article>
+<nav class="pagination">
+        {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">⬅️ 上一页</a>{% endif %}
+        <span>第 {{ current_path }} 页</span>
+        {% if next_path %}<a href="/work/{{work.id}}/{{ next_path }}">下一页 ➡️</a>{% endif %}
     </nav>
+    <script>
+        let isRendered = false;
+        let activeElement = null;
+
+        document.getElementById('init-gloss-btn').addEventListener('click', async function() {
+            const container = document.getElementById('latin-content');
+            const btn = this;
+
+            if (isRendered) return;
+
+            btn.textContent = '分析中...';
+            try {
+                const response = await fetch(`/api/gloss?work_id=${container.dataset.workid}&path=${container.dataset.path}`);
+                const data = await response.json();
+                
+                if (data && data.gloss) {
+                    renderPopover(container, data.gloss);
+                    isRendered = true;
+                    btn.style.display = 'none'; // 加载后隐藏按钮
+                }
+            } catch (e) {
+                btn.textContent = '加载失败，点击重试';
+            }
+        });
+
+        function renderPopover(container, glossArray) {
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            const nodes = [];
+            while(walker.nextNode()) nodes.push(walker.currentNode);
+
+            let idx = 0;
+            const wordRegex = /([\p{L}]+)/gu;
+
+            nodes.forEach(node => {
+                const text = node.nodeValue;
+                const tokens = text.split(wordRegex);
+                const fragment = document.createDocumentFragment();
+
+                tokens.forEach(token => {
+                    if (/[\p{L}]+/u.test(token) && idx < glossArray.length) {
+                        const item = glossArray[idx];
+                        const span = document.createElement('span');
+                        span.className = 'word-wrapper';
+                        
+                        // 内部结构
+                        span.innerHTML = `
+                            ${token}<div class="gloss-popover">
+                                <span class="m-text">${item.m || ''}</span>
+                                <span class="g-text">${item.g || ''}</span>
+                            </div>
+                        `;
+
+                        // 点击逻辑
+                        span.onclick = (e) => {
+                            e.stopPropagation();
+                            
+                            // 1. 如果点击的是当前已激活的 -> 关闭它
+                            if (activeElement === span) {
+                                span.classList.remove('active');
+                                activeElement = null;
+                            } else {
+                                // 2. 关闭之前激活的
+                                if (activeElement) activeElement.classList.remove('active');
+                                // 3. 激活当前的
+                                span.classList.add('active');
+                                activeElement = span;
+                            }
+                        };
+
+                        fragment.appendChild(span);
+                        idx++;
+                    } else {
+                        // 标点和空格原样保留
+                        fragment.appendChild(document.createTextNode(token));
+                    }
+                });
+                node.parentNode.replaceChild(fragment, node);
+            });
+        }
+
+        // 全局点击关闭逻辑
+        document.addEventListener('click', () => {
+            if (activeElement) {
+                activeElement.classList.remove('active');
+                activeElement = null;
+            }
+        });
+    </script>
 </body>
 </html>
