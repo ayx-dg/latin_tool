@@ -81,7 +81,6 @@ def work_detail(request, work_id, path):
                  .order_by('min_order')
                  .values_list('path', flat=True))
     
-    print(all_paths)
     try:
         current_index = all_paths.index(path)
         prev_path = all_paths[current_index - 1] if current_index > 0 else None
