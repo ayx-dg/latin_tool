@@ -19,6 +19,7 @@ load_dotenv()
 
 # 现在这行代码就能读到值了
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+TURNSTILE_SECRET = os.getenv('TURNSTILE_SECRET')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -125,3 +126,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+
+# 确保 CACHES 指向 Redis
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://:9437@127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}

@@ -105,7 +105,19 @@
         .g-text { color: var(--accent-g); font-size: 0.85rem; }
 
         /* 按钮样式 */
-        .controls { text-align: center; margin-bottom: 40px; }
+/*        .controls { text-align: center; margin-bottom: 40px; } */
+        .controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+#turnstile-container {
+    /* 确保验证码不超出移动端屏幕 */
+    max-width: 100%;
+}
         #init-gloss-btn {
             padding: 10px 24px;
             background: #2c3e50;
@@ -133,14 +145,18 @@
 </head>
 <body>
 
+
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
     <div class="controls">
         <button id="init-gloss-btn">加载原文分析</button>
+        <div id="captcha-container" data-sitekey=""></div>
     </div>
 
     <article id="latin-content" 
              data-workid="{{ work.id }}" 
              data-path="{{ current_path }}">
-        {% for s in segments %}{{ s.text }} {% endfor %}
+        {{full_text}}
     </article>
 <nav class="pagination">
         {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">⬅️ 上一页</a>{% endif %}
@@ -152,26 +168,75 @@
         let activeElement = null;
 
         document.getElementById('init-gloss-btn').addEventListener('click', async function() {
-            const container = document.getElementById('latin-content');
-            const btn = this;
 
-            if (isRendered) return;
 
-            btn.textContent = '分析中...';
-            try {
-                const response = await fetch(`/api/gloss?work_id=${container.dataset.workid}&path=${container.dataset.path}`);
-                const data = await response.json();
-                
-                if (data && data.gloss) {
-                    renderPopover(container, data.gloss);
-                    isRendered = true;
-                    btn.style.display = 'none'; // 加载后隐藏按钮
-                }
-            } catch (e) {
-                btn.textContent = '加载失败，点击重试';
-            }
+// 手动渲染 Turnstile
+    turnstile.render('#captcha-container', {
+        sitekey: '0x4AAAAAADFFjr5kIkGQ6Hit',
+        callback: function(token) {
+            console.log("验证成功，Token:", token);
+            const container = document.getElementById('captcha-container');
+            container.style.display = 'none';
+            getGlossApi(token)
+            // 这里可以处理验证成功后的逻辑，比如启用提交按钮或发送请求
+        },
+        'error-callback': function() {
+            console.error("验证初始化失败");
+        },
+        theme: 'auto', // 可选：light, dark, auto
+    });
+
         });
 
+
+        async function getGlossApi(token){
+
+            const container = document.getElementById('latin-content');
+            const btn = document.getElementById('init-gloss-btn');
+            if (isRendered) return;
+            btn.textContent = '分析中...'; 
+            try {
+                const response = await fetch(`/api/gloss?work_id=${container.dataset.workid}&path=${container.dataset.path}&cf_token=${token}`);
+if (!response.ok) {
+            // 针对 429 状态码的特殊处理
+            if (response.status === 429) {
+                btn.textContent = '操作太快了，请稍后再试';
+                // 如果后端在 Header 中返回了等待时间，可以利用它
+                const retryAfter = response.headers.get('Retry-After');
+                const msg = retryAfter ? `请求过于频繁，请在 ${retryAfter} 秒后再试。` : '请求过于频繁，请稍后再试。';
+                throw new Error(msg);
+            }
+
+            // 处理其他错误（如 403 验证码错误）
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.gloss) {
+            renderPopover(container, data.gloss);
+            isRendered = true;
+            btn.style.display = 'none';
+            document.getElementById('turnstile-container').style.display = 'none';
+        }
+    } catch (e) {
+        console.error(e);
+        // 如果不是 429 导致的错误，恢复重试文案
+        if (btn.textContent === '分析中...') {
+            btn.textContent = '加载失败，点击重试';
+        }
+        btn.disabled = false;
+
+        // 只有 403 验证码失效或后端要求时才重置验证码
+        if (window.turnstile) {
+            turnstile.reset('#turnstile-container');
+        }
+
+        // 使用更温和的提示方式（可选）
+        alert(e.message);
+    }
+}
         function renderPopover(container, glossArray) {
             const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
             const nodes = [];
