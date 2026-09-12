@@ -15,7 +15,11 @@ services:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
-        value: .onrender.com
+        # Render 的健康检查可能用内部主机名，限定域名会导致 400 判定为部署失败
+        value: "*"
+      - key: SECURE_SSL_REDIRECT
+        # Render 边缘节点已强制 HTTPS，应用层再跳 301 会让健康检查拿到非 2xx
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: GEMINI_API_KEY
