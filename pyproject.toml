@@ -19,7 +19,10 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "MyDjango.settings"
+# 测试默认用内存 SQLite（MyDjango/settings_test.py），避免污染 Supabase 生产库
+DJANGO_SETTINGS_MODULE = "MyDjango.settings_test"
+# index/tests.py 不在默认的 test_*.py 匹配里，显式加上
+python_files = ["test_*.py", "*_test.py", "tests.py"]
 
 [dependency-groups]
 dev = [

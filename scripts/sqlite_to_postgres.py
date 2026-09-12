@@ -22,6 +22,7 @@ from datetime import datetime
 
 import psycopg
 from dotenv import load_dotenv
+from psycopg.types.json import Jsonb
 
 LEGACY_DDL = """
 CREATE TABLE IF NOT EXISTS works (
@@ -72,6 +73,9 @@ def _normalise(table: str, row: tuple) -> tuple:
                 row[2] = json.loads(row[2])
             except json.JSONDecodeError:
                 pass
+        # jsonb 列必须显式包装，psycopg 在 AUTO 模式下无法自适应 dict
+        if isinstance(row[2], (dict, list)):
+            row[2] = Jsonb(row[2])
         if isinstance(row[3], str):
             try:
                 row[3] = datetime.fromisoformat(row[3])
@@ -120,6 +124,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="SQLite -> Postgres 导入")
     parser.add_argument("sqlite_path", nargs="?", default="latin_library.db")
     parser.add_argument("--batch-size", type=int, default=5000)
+    parser.add_argument(
+        "--tables",
+        default=",".join(TABLES),
+        help="只导入指定表，逗号分隔，默认全部",
+    )
     args = parser.parse_args()
 
     database_url = os.getenv("DATABASE_URL")
@@ -137,7 +146,13 @@ def main() -> int:
             pg_cur.execute(LEGACY_DDL)
         pg_conn.commit()
 
-        for table in TABLES:
+        selected = [t.strip() for t in args.tables.split(",") if t.strip()]
+        unknown = [t for t in selected if t not in TABLES]
+        if unknown:
+            print(f"错误: 未知表 {unknown}，可选: {', '.join(TABLES)}", file=sys.stderr)
+            return 1
+
+        for table in selected:
             print(f"导入 {table}...")
             total = copy_table(sqlite_conn, pg_conn, table, args.batch_size)
             print(f"{table} 完成: {total} 行")

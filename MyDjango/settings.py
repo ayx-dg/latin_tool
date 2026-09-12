@@ -182,6 +182,13 @@ else:
         }
     }
 
+# 标注模型调用：超时（秒）、失败重试次数
+GLOSS_TIMEOUT = float(os.getenv('GLOSS_TIMEOUT', '60'))
+GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
+
+# Cloudflare Turnstile 人机验证，可关闭（本地开发或不想打断阅读体验时）
+TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+
 # Render / 反向代理在前面终止 TLS，需要信任 X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 

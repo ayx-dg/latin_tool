@@ -143,6 +143,42 @@ uv run python -m pytest index/tests.py -v
 | Redis | `settings.py` | 缓存/限流后端 |
 | SQLite | `latin_library.db` | 主数据库 |
 
+## 标注模型与额度
+
+免费额度（RPD/RPM）很小，在线"点一次算一次"必然超时或 429，所以策略是**离线预热 + 在线只查缓存**。
+
+```bash
+# 1. 探针：模型通不通、返回能不能和词表对齐（不查缓存）
+uv run python scripts/check_gloss.py
+uv run python scripts/check_gloss.py --repeat 5        # 观察限流
+uv run python scripts/check_gloss.py --work-id 1 --path <path>   # 用真实章节
+
+# 2. 离线预热：提前把标注算好写进 GlossCache
+uv run python scripts/prefetch_gloss.py --dry-run --limit 20     # 先看计划
+uv run python scripts/prefetch_gloss.py --limit 10 --sleep 4     # 真跑，每章间隔 4 秒
+```
+
+相关环境变量：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `GLOSS_TIMEOUT` | 60 | 单次模型请求超时（秒） |
+| `GLOSS_RETRIES` | 2 | 失败重试次数，指数退避 |
+| `TURNSTILE_ENABLED` | true | 关掉可去掉 Cloudflare 验证，体验更顺 |
+
+健壮性约定：**模型返回的数量/索引和词表对不上时不写 `GlossCache`**，避免错位结果被永久缓存；
+前端按 `\p{L}+` 顺序消费数组，一旦错位整页标注都会平移。
+
+## 测试
+
+```bash
+uv run pytest                # 22 个单元测试 + 2 个跳过（约 1 秒）
+RUN_LIVE_GLOSS=1 uv run pytest index/test_gloss_live.py -v -s   # 真实调模型
+```
+
+测试统一走 `MyDjango/settings_test.py`（内存 SQLite），不会碰 Supabase；
+要针对真实库跑：`uv run pytest --ds=MyDjango.settings`。
+
 ## 部署检查
 
 ```bash
