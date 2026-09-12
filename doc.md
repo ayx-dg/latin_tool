@@ -168,6 +168,13 @@ uv run manage.py check --deploy
 2. `Project Settings → Database → Connection string → URI`，复制（端口 6543 的 pooler 地址）
 3. 密码里有特殊字符时先 URL encode
 
+> ⚠️ **两个必踩的坑**
+> - **必须用 pooler，不能用直连**：`db.<ref>.supabase.co` 现在只有 IPv6 记录（无 A 记录），
+>   Render 的 IPv4 出口连不上（直连 IPv4 是付费 add-on）。用
+>   `aws-0-<region>.pooler.supabase.com`。
+> - **pooler 的用户名是 `postgres.<ref>`，不是 `postgres`**：写成 `postgres` 会
+>   `FATAL: password authentication failed for user "postgres"`。
+
 ### 2. 导入数据
 
 ```bash
