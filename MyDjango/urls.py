@@ -15,11 +15,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import path
 from index import views
 from index import models
 
+
+def healthz(request):
+    """健康检查：不查数据库，避免 works 表还没导入时 Render 判定服务不可用。"""
+    return HttpResponse('ok', content_type='text/plain')
+
+
 urlpatterns = [
+    path('healthz', healthz, name='healthz'),
     path('admin/', admin.site.urls),
     #path('', index)
     path('', views.work_list, name='work_list'),

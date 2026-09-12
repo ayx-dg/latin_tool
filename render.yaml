@@ -7,7 +7,8 @@ services:
     region: singapore
     branch: main
     dockerfilePath: ./Dockerfile
-    healthCheckPath: /
+    # works 表未导入前首页会 500，健康检查用不查库的 /healthz
+    healthCheckPath: /healthz
     numInstances: 1
     envVars:
       - key: DJANGO_DEBUG
