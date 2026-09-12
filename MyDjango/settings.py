@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from dotenv import load_dotenv
 
 # 这行代码会搜索项目根目录下的 .env 文件并将其内容读入环境变量
@@ -101,9 +101,10 @@ def _database_config():
     parsed = urlparse(url)
     return {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': parsed.path.lstrip('/'),
-        'USER': parsed.username,
-        'PASSWORD': parsed.password,
+        # urlparse 不会解码百分号转义，密码里的 @ # $ ! & 等必须 unquote 后才能用于认证
+        'NAME': unquote(parsed.path.lstrip('/')),
+        'USER': unquote(parsed.username) if parsed.username else '',
+        'PASSWORD': unquote(parsed.password) if parsed.password else '',
         'HOST': parsed.hostname,
         'PORT': parsed.port or 5432,
         # Supabase 的 pooler(6543) 走 transaction 模式，不要复用长连接
