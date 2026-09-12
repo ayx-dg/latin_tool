@@ -9,3 +9,14 @@ wheels/
 # Virtual environments
 .venv/
 .env
+
+# Deployment artifacts
+staticfiles/
+.env.*
+!.env.example
+
+# Local data & logs
+latin_library.db
+*.log
+.pytest_cache
+djangoLearn/

@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: latin-library
+    runtime: docker
+    plan: free
+    # 建议和 Supabase 项目选同一个地区，减少连接延迟
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    numInstances: 1
+    envVars:
+      - key: DJANGO_DEBUG
+        value: false
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TURNSTILE_SECRET
+        sync: false
+      - key: PORT
+        value: "8000"
