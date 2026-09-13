@@ -201,6 +201,21 @@ RUN_LIVE_GLOSS=1 uv run pytest index/test_gloss_live.py -v -s   # 真实调模�
 测试统一走 `MyDjango/settings_test.py`（内存 SQLite），不会碰 Supabase；
 要针对真实库跑：`uv run pytest --ds=MyDjango.settings`。
 
+## 提醒通道
+
+需要人工介入时：
+
+```bash
+scripts/notify.sh "标题" "正文"
+```
+
+- 桌面通知（`notify-send`）+ 日志 `/tmp/opencode/notifications.log`
+- 同时唤起 **Thunderbird** 撰写窗口（收件人默认 `72655423@cityu-dg.edu.cn`，
+  账号是 Office365 + OAuth2，没有可复用的明文密码，所以走已登录的 Thunderbird）
+- 配了 `NOTIFY_SMTP_HOST/USER/PASS` 就直接 smtplib 发送（完全自动）
+- 装了 [thunderbird-mcp](https://github.com/TKasperczyk/thunderbird-mcp) 并重启 opencode 后，
+  可由 AI 直接调用 `sendMail` 自动发信
+
 ## 部署检查
 
 ```bash
