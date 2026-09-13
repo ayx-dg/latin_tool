@@ -34,12 +34,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MyDjango.settings")
 django.setup()
 
+from django.db import connection  # noqa: E402
 from django.db.models import Min  # noqa: E402
+from django.db.utils import OperationalError  # noqa: E402
 
 from index.models import Contents, Works  # noqa: E402
 from index.views import _missing_count, get_or_create_gloss  # noqa: E402
 
 QUOTA_MARKERS = ("429", "resource_exhaust", "quota", "rate limit", "rate_limit")
+
+
+def with_db_retry(fn, *args, **kwargs):
+    """Supabase pooler 会掐断长时间空闲的连接（SSL EOF），重连重试即可。"""
+    last_error = None
+    for attempt in range(3):
+        try:
+            return fn(*args, **kwargs)
+        except OperationalError as exc:
+            last_error = exc
+            print(f"  数据库连接断开，重连重试 ({attempt + 1}/3)")
+            try:
+                connection.close()
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(2)
+    raise last_error
 
 
 def list_chapters(work_id=None, after=None, limit=0):
@@ -80,7 +99,8 @@ def main() -> int:
 
     done = skipped = failed = 0
     for i, (work_id, path) in enumerate(chapters, start=1):
-        text = build_text(work_id, path)
+        connection.close()  # 上一轮 sleep 期间连接可能已被 pooler 关闭
+        text = with_db_retry(build_text, work_id, path)
         words = len(re.findall(r'[^\W\d_]+', text, re.UNICODE))
         title = Works.objects.filter(id=work_id).values_list("title", flat=True).first()
         label = f"[{i}/{len(chapters)}] work={work_id} {title or ''} words={words}"
@@ -97,7 +117,7 @@ def main() -> int:
             continue
 
         try:
-            gloss_data, text_hash = get_or_create_gloss(text)
+            gloss_data, text_hash = with_db_retry(get_or_create_gloss, text)
             missing = _missing_count(gloss_data)
             status = "ok" if missing == 0 else f"缺 {missing} 词(未缓存)"
             print(f"{label} -> {status} hash={text_hash[:8]}")
