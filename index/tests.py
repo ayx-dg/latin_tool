@@ -117,15 +117,33 @@ class TestCallProviderRetry:
         words = ["arma"]
         payload = {"items": [{"i": 1, "m": "武器", "g": "名词"}]}
         with patch("index.llm.complete", return_value=json.dumps(payload)) as complete:
-            items, missing = _call_provider_with_retry("prompt", words)
+            items, missing = _call_provider_with_retry(words)
         assert missing == 0
         assert items[0]["m"] == "武器"
         assert complete.call_count == 1
 
+    def test_splits_long_text_into_chunks(self):
+        """整章一次请求会被 504，必须分块后按原顺序合并。"""
+        words = [f"w{i}" for i in range(5)]
+
+        def fake_complete(prompt):
+            chunk = [
+                line.split(". ", 1)[1]
+                for line in prompt.splitlines()
+                if ". " in line and line.split(".", 1)[0].strip().isdigit()
+            ]
+            return json.dumps({"items": [{"i": i + 1, "m": f"含义-{w}"} for i, w in enumerate(chunk)]})
+
+        with patch("index.llm.complete", side_effect=fake_complete) as complete:
+            items, missing = _call_provider_with_retry(words, chunk_size=2)
+        assert complete.call_count == 3  # 2 + 2 + 1
+        assert missing == 0
+        assert [i["m"] for i in items] == [f"含义-w{i}" for i in range(5)]
+
     def test_retries_then_falls_back_on_error(self):
         with patch("index.llm.complete", side_effect=RuntimeError("429 quota")) as complete, \
              patch("index.views.time.sleep"):
-            items, missing = _call_provider_with_retry("prompt", ["a", "b"])
+            items, missing = _call_provider_with_retry(["a", "b"])
         assert complete.call_count == 3  # 初次 + 2 次重试
         assert missing == 2
         assert all(i["m"] == "解析失败" for i in items)

@@ -185,6 +185,8 @@ else:
 # 标注模型调用：超时（秒）、失败重试次数
 GLOSS_TIMEOUT = float(os.getenv('GLOSS_TIMEOUT', '60'))
 GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
+# 单次请求的最大词数：整章一次请求会被 Gemini 判 504，必须分块
+GLOSS_CHUNK_WORDS = int(os.getenv('GLOSS_CHUNK_WORDS', '150'))
 
 # 模型 provider：gemini（Google AI Studio）或 openai_compatible（DeepSeek / OpenRouter /
 # Groq / Azure AI Foundry / Gemini 的 OpenAI 兼容端点）。换模型只改环境变量。

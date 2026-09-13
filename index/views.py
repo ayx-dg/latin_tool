@@ -106,7 +106,8 @@ def _extract_words(full_text):
 
 
 def _build_gloss_prompt(full_text):
-    words_only = _extract_words(full_text)
+    # 既接受整段文本，也接受已经切好的词表（分块时传列表）
+    words_only = full_text if isinstance(full_text, list) else _extract_words(full_text)
     indexed_text = "\n".join([f"{i+1}. {word}" for i, word in enumerate(words_only)])
     return f"""
 Analyze the following Latin words and provide a JSON object.
@@ -175,15 +176,17 @@ def _align_items(words, raw):
     return result, missing
 
 
-def _call_provider_with_retry(prompt, words):
-    """带超时和退避重试地调用模型。返回 (items, missing)。"""
-    timeout = float(getattr(settings, "GLOSS_TIMEOUT", 60))
+def _gloss_words_with_retry(words):
+    """对一小批词调用模型，带退避重试。返回 (items, missing)。"""
+    if not words:
+        return [], 0
+
     retries = int(getattr(settings, "GLOSS_RETRIES", 2))
     last_error = None
 
     for attempt in range(retries + 1):
         try:
-            raw = llm.complete(prompt)
+            raw = llm.complete(_build_gloss_prompt(words))
             items, missing = _align_items(words, json.loads(raw))
             if missing == 0:
                 return items, 0
@@ -195,7 +198,30 @@ def _call_provider_with_retry(prompt, words):
         if attempt < retries:
             time.sleep(2 ** attempt)
 
-    return _fallback_gloss(" ".join(words)) if words else [], len(words)
+    return [{"w": w, "m": "解析失败", "g": ""} for w in words], len(words)
+
+
+def _call_provider_with_retry(words, chunk_size=None):
+    """长章节分块请求再合并：整章一次请求会被 Gemini 判 504 超时。
+
+    返回 (items, missing)。
+    """
+    if chunk_size is None:
+        chunk_size = int(getattr(settings, "GLOSS_CHUNK_WORDS", 150))
+    if not words:
+        return [], 0
+    if chunk_size <= 0 or len(words) <= chunk_size:
+        return _gloss_words_with_retry(words)
+
+    merged = []
+    total_missing = 0
+    for start in range(0, len(words), chunk_size):
+        chunk = words[start:start + chunk_size]
+        items, missing = _gloss_words_with_retry(chunk)
+        merged.extend(items)
+        total_missing += missing
+        logger.info("分块标注 %s-%s / %s（缺失 %s）", start + 1, start + len(chunk), len(words), missing)
+    return merged, total_missing
 
 
 def get_or_create_gloss(full_text):
@@ -207,7 +233,7 @@ def get_or_create_gloss(full_text):
         return cached.gloss_data, text_hash
 
     words = _extract_words(full_text)
-    gloss_data, missing = _call_provider_with_retry(_build_gloss_prompt(full_text), words)
+    gloss_data, missing = _call_provider_with_retry(words)
 
     if missing:
         # 错位的结果绝不能写进缓存，否则以后永远读到错误标注
