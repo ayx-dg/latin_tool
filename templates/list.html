@@ -202,7 +202,6 @@
         <a class="work-card" href="{% url 'work_redirect' w.id %}"
            data-search="{{ author|lower }} {{ w.title|lower }}">
             <div class="title">{{ w.title }}</div>
-            {% ifchanged %}{% endchanged %}
         </a>
         {% endfor %}
     </div>
