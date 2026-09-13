@@ -103,8 +103,14 @@ def _parse_gloss(section: str) -> str:
         if not line.startswith("#") or line.startswith("#:"):
             continue
         cleaned = _strip_templates(line.lstrip("#*").strip())
-        if cleaned and "inflection of" not in cleaned.lower():
-            return cleaned[:300]
+        if not cleaned or "inflection of" in cleaned.lower():
+            continue
+        # 跳过引文/参考文献行（"Tacitus, Gemanica, chapter 1 (Oxford…)" 之类）
+        if re.search(r"(Oxford|chapter|References|ISBN|\(\d{4}\)|, [A-Z][a-z]+, [A-Z])", cleaned):
+            continue
+        if len(cleaned) > 160:
+            continue
+        return cleaned
     return ""
 
 

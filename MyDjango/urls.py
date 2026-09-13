@@ -34,5 +34,6 @@ urlpatterns = [
     path('work/<int:work_id>/<path:path>/', views.work_detail, name='work_detail'),
     # 新增：只输入 ID 时的处理
     path('work/<int:work_id>/', views.work_redirect, name='work_redirect'),
-    path('api/gloss', views.api_get_gloss, name='api_get_gloss')
+    path('api/gloss', views.api_get_gloss, name='api_gloss'),
+    path('api/explain', views.api_explain, name='api_explain'),
 ]
