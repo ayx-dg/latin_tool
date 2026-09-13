@@ -384,9 +384,9 @@ def api_explain(request):
 
     ChapterNote.objects.create(
         work_id=work_id, path=path, text_hash=text_hash,
-        note=answer, provider=llm.get_last_provider() or getattr(settings, "LLM_PROVIDER", ""),
+        note=answer, provider=llm.get_last_provider(),
     )
-    return JsonResponse({'status': 'success', 'note': answer, 'cached': False})
+    return JsonResponse({'status': 'success', 'note': answer, 'cached': False, 'provider': llm.get_last_provider()})
 
 
 @csrf_exempt

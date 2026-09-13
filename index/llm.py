@@ -167,7 +167,9 @@ def get_last_provider() -> str:
     """返回最近一次 complete() 成功的 provider 名称。"""
     if _last_provider:
         return _last_provider
-    return getattr(settings, "LLM_PROVIDER", "") or (provider_chain()[0] if provider_chain() else "")
+    # 多 worker 下 _last_provider 可能不可靠，回退到 chain 首选
+    chain = provider_chain()
+    return chain[0] if chain else getattr(settings, "LLM_PROVIDER", "")
 
 
 def reset_provider() -> None:
