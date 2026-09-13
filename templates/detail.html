@@ -8,8 +8,8 @@
         :root {
             --popover-bg: #2c3e50;
             --popover-text: #ffffff;
-            --accent-m: #ff9f43; /* 释义颜色 */
-            --accent-g: #bdc3c7; /* 语法颜色 */
+            --accent-m: #ff9f43;
+            --accent-g: #bdc3c7;
         }
 
         body {
@@ -18,26 +18,26 @@
             padding: 40px 20px;
             background-color: #fdfdfd;
         }
-@media (max-width: 600px) {
-    /* 在移动端改变浮窗行为 */
-    .word-wrapper.active .gloss-popover {
-        display: block;
-        position: fixed; /* 变成固定定位 */
-        bottom: 70px;    /* 放在底部导航栏上方 */
-        left: 10px;
-        right: 10px;
-        width: auto;
-        max-width: none;
-        transform: none; /* 取消居中对齐 */
-        border-radius: 12px;
-    }
-    
-    .gloss-popover::after {
-        display: none; /* 底部模式不需要小箭头 */
-    }
-}
 
-        /* 正文容器 */
+        @media (max-width: 600px) {
+            .word-wrapper.active .gloss-popover {
+                display: block;
+                position: fixed;
+                bottom: 70px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+                max-width: none;
+                transform: none;
+                border-radius: 12px;
+            }
+            .gloss-popover::after {
+                display: none;
+            }
+            #latin-content { font-size: 1.15rem; }
+            .controls { padding: 0 10px; }
+        }
+
         #latin-content {
             max-width: 800px;
             margin: 0 auto;
@@ -46,51 +46,42 @@
             text-align: justify;
         }
 
-        /* 1. 单词包装器：设为 inline 确保标点不位移 */
         .word-wrapper {
             position: relative;
-            display: inline; 
+            display: inline;
             cursor: pointer;
             transition: background 0.2s;
             border-bottom: 1px solid transparent;
         }
-
         .word-wrapper:hover {
             border-bottom: 1px dashed #ccc;
         }
 
+        .gloss-popover {
+            display: none;
+            position: absolute;
+            bottom: 140%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: max-content;
+            min-width: 100px;
+            max-width: 80vw;
+            white-space: normal;
+            word-break: normal;
+            background: var(--popover-bg);
+            color: var(--popover-text);
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            line-height: 1.5;
+        }
 
-        /* 浮窗小箭头 */
-        /* 浮窗样式优化 */
-    .gloss-popover {
-    display: none;
-    position: absolute;
-    bottom: 140%;
-    left: 50%;
-    transform: translateX(-50%);
-    
-    /* 核心改进 */
-    width: max-content;
-    min-width: 100px;
-    max-width: 80vw; /* 限制浮窗最宽不超过屏幕的 80% */
-    white-space: normal; /* 允许内容在必要时换行 */
-    word-break: break-all;
-    
-    background: var(--popover-bg);
-    padding: 10px;
-    z-index: 1000;
-}
-
-/* 如果单词太靠近左边或右边，利用 CSS 的边界检查是不可能的 */
-/* 所以我们需要 JS 配合，或者使用下面的 JS 动态计算方案 */
-
-        /* 激活状态样式 */
         .word-wrapper.active {
             display: inline-block;
             background-color: rgba(255, 159, 67, 0.15);
             border-bottom: 1px solid var(--accent-m);
         }
-
         .word-wrapper.active .gloss-popover {
             display: inline-block;
             animation: fadeIn 0.15s ease-out;
@@ -104,64 +95,99 @@
         .m-text { color: var(--accent-m); font-weight: bold; margin-right: 8px; }
         .g-text { color: var(--accent-g); font-size: 0.85rem; }
 
-        /* 按钮样式 */
-/*        .controls { text-align: center; margin-bottom: 40px; } */
         .controls {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 20px;
-}
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
 
-#turnstile-container {
-    /* 确保验证码不超出移动端屏幕 */
-    max-width: 100%;
-}
+        #turnstile-container { max-width: 100%; }
 
-.gloss-status {
-    min-height: 1.2em;
-    font-size: 0.9rem;
-    color: #666;
-    text-align: center;
-    max-width: 640px;
-}
-.gloss-status.error { color: #b00020; }
-.gloss-status.warn  { color: #a15c00; }
-.gloss-status.ok    { color: #0a7a3d; }
+        .gloss-status {
+            min-height: 1.2em;
+            font-size: 0.9rem;
+            color: #666;
+            text-align: center;
+            max-width: 640px;
+        }
+        .gloss-status.error { color: #b00020; }
+        .gloss-status.warn  { color: #a15c00; }
+        .gloss-status.ok    { color: #0a7a3d; }
 
-#explain-btn {
-    padding: 6px 14px;
-    font-size: 0.9rem;
-    cursor: pointer;
-}
-.explain-panel {
-    margin-top: 10px;
-    padding: 14px 16px;
-    max-width: 720px;
-    text-align: left;
-    background: #fafafa;
-    border: 1px solid #e3e3e3;
-    border-radius: 6px;
-    line-height: 1.7;
-    white-space: pre-wrap;
-    font-size: 0.95rem;
-}
-        #init-gloss-btn {
-            padding: 10px 24px;
-            background: #2c3e50;
-            color: white;
+        /* buttons */
+        .btn {
+            padding: 8px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 0.95rem;
+            transition: background 0.2s, opacity 0.2s;
         }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-primary { background: #2c3e50; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #34495e; }
+        .btn-secondary { background: #ecf0f1; color: #2c3e50; border: 1px solid #bdc3c7; }
+        .btn-secondary:hover:not(:disabled) { background: #bdc3c7; }
+
+        /* spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(0,0,0,0.15);
+            border-top-color: #2c3e50;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* explain panel */
+        .explain-panel {
+            margin-top: 10px;
+            padding: 14px 16px;
+            max-width: 720px;
+            text-align: left;
+            background: #fafafa;
+            border: 1px solid #e3e3e3;
+            border-radius: 6px;
+            line-height: 1.7;
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+        }
+        .explain-panel h1, .explain-panel h2, .explain-panel h3 {
+            margin: 16px 0 8px;
+            color: #2c3e50;
+        }
+        .explain-panel h1 { font-size: 1.1rem; }
+        .explain-panel h2 { font-size: 1.05rem; }
+        .explain-panel h3 { font-size: 1rem; }
+        .explain-panel ul, .explain-panel ol { padding-left: 20px; margin: 8px 0; }
+        .explain-panel li { margin: 4px 0; }
+        .explain-panel code {
+            background: #f0f0f0;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-family: "Palatino Linotype", serif;
+        }
+        .explain-panel em { color: #666; }
+
+        .loading-hint {
+            font-size: 0.85rem;
+            color: #888;
+            text-align: center;
+            margin-top: 4px;
+        }
+
         pagination {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             height: 60px;
-            background: var(--nav-bg);
+            background: var(--popover-bg);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -170,244 +196,228 @@
             border-top: 1px solid #eee;
             z-index: 2000;
         }
+        pagination a { color: white; text-decoration: none; }
     </style>
 </head>
 <body>
-
 
     {% if turnstile_enabled %}
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     {% endif %}
 
     <div class="controls">
-        <button id="init-gloss-btn">加载原文分析</button>
+        <button id="init-gloss-btn" class="btn btn-primary">加载逐词标注</button>
         <div id="captcha-container" data-sitekey=""></div>
         <div id="gloss-status" class="gloss-status"></div>
-        <button id="explain-btn" class="secondary">AI 讲解整章</button>
+        <button id="explain-btn" class="btn btn-secondary">AI 讲解整章</button>
         <div id="explain-panel" class="explain-panel" hidden></div>
     </div>
 
-    <article id="latin-content" 
-             data-workid="{{ work.id }}" 
-             data-path="{{ current_path }}">
-        {{full_text}}
-    </article>
+    <article id="latin-content"
+             data-workid="{{ work.id }}"
+             data-path="{{ current_path }}">{{full_text}}</article>
+
 <nav class="pagination">
-        {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">⬅️ 上一页</a>{% endif %}
-        <span>第 {{ current_path }} 页</span>
-        {% if next_path %}<a href="/work/{{work.id}}/{{ next_path }}">下一页 ➡️</a>{% endif %}
-    </nav>
-    <script>
-        let isRendered = false;
-        let activeElement = null;
+    {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">&#x2190; 上一页</a>{% endif %}
+    <span>第 {{ current_path }} 页</span>
+    {% if next_path %}<a href="/work/{{work.id}}/{{ next_path }}">下一页 &#x2192;</a>{% endif %}
+</nav>
 
-        const TURNSTILE_ENABLED = {{ turnstile_enabled|yesno:"true,false" }};
+<script>
+let isRendered = false;
+let activeElement = null;
+const TURNSTILE_ENABLED = {{ turnstile_enabled|yesno:"true,false" }};
+let turnstileWidgetId = null;
 
-        let turnstileWidgetId = null;   // 保留 widget id，token 单次有效，重试前必须 reset
-
-        function resetTurnstile() {
-            if (turnstileWidgetId !== null && window.turnstile) {
-                try { turnstile.reset(turnstileWidgetId); } catch (e) { /* 已销毁 */ }
-            }
-        }
-
-        document.getElementById('init-gloss-btn').addEventListener('click', async function() {
-
-// 关闭验证时直接请求，否则走 Turnstile
-    if (!TURNSTILE_ENABLED) {
-        getGlossApi(null);
-        return;
+function resetTurnstile() {
+    if (turnstileWidgetId !== null && window.turnstile) {
+        try { turnstile.reset(turnstileWidgetId); } catch (e) {}
     }
+}
 
-    if (typeof turnstile === 'undefined') {
-        showError('验证脚本加载失败，请检查网络后重试。');
-        return;
-    }
+function showError(msg) {
+    const box = document.getElementById('gloss-status');
+    box.textContent = msg;
+    box.className = 'gloss-status error';
+    const btn = document.getElementById('init-gloss-btn');
+    btn.innerHTML = '重新加载标注';
+    btn.disabled = false;
+}
+function showStatus(msg, kind) {
+    const box = document.getElementById('gloss-status');
+    box.textContent = msg;
+    box.className = 'gloss-status ' + (kind || '');
+}
+function setBtnLoading(btn, text) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>' + text;
+}
+function setBtnDone(btn, text) {
+    btn.disabled = false;
+    btn.textContent = text;
+}
 
-// 手动渲染 Turnstile（action 必须和后端校验的一致）
+/* ---- Gloss ---- */
+document.getElementById('init-gloss-btn').addEventListener('click', async function() {
+    if (!TURNSTILE_ENABLED) { getGlossApi(null); return; }
+    if (typeof turnstile === 'undefined') { showError('验证脚本加载失败，请检查网络后重试。'); return; }
     if (turnstileWidgetId === null) {
         turnstileWidgetId = turnstile.render('#captcha-container', {
             sitekey: '{{ turnstile_sitekey }}',
             action: 'gloss',
-            callback: function(token) {
-                getGlossApi(token);
-            },
-            'error-callback': function() {
-                showError('人机验证失败，请重试。');
-                resetTurnstile();
-            },
-            'expired-callback': function() {
-                showError('验证已过期，请重新点击按钮。');
-                resetTurnstile();
-            },
+            callback: function(token) { getGlossApi(token); },
+            'error-callback': function() { showError('人机验证失败，请重试。'); resetTurnstile(); },
+            'expired-callback': function() { showError('验证已过期，请重新点击按钮。'); resetTurnstile(); },
             theme: 'auto',
         });
     } else {
         resetTurnstile();
     }
+});
 
+async function getGlossApi(token) {
+    const container = document.getElementById('latin-content');
+    const btn = document.getElementById('init-gloss-btn');
+    if (isRendered) return;
+    setBtnLoading(btn, '正在查词典...');
+    showStatus('正在查询公开词典，章节越长越久…');
+    try {
+        const params = new URLSearchParams({
+            work_id: container.dataset.workid,
+            path: container.dataset.path,
         });
-
-
-        function showError(message) {
-            const box = document.getElementById('gloss-status');
-            if (box) {
-                box.textContent = message;
-                box.className = 'gloss-status error';
+        if (token) params.set('cf_token', token);
+        const response = await fetch(`/api/gloss?${params.toString()}`);
+        if (!response.ok) {
+            if (response.status === 429) {
+                const r = response.headers.get('Retry-After');
+                throw new Error(r ? `请求过于频繁，请 ${r} 秒后重试。` : '请求过于频繁，请稍后再试。');
             }
-            const btn = document.getElementById('init-gloss-btn');
-            btn.textContent = '重新加载标注';
-            btn.disabled = false;
+            let msg = `服务返回 ${response.status}`;
+            try { const d = await response.json(); msg = d.error || msg; } catch (_) {}
+            throw new Error(msg);
         }
-
-        function showStatus(message, kind) {
-            const box = document.getElementById('gloss-status');
-            if (box) {
-                box.textContent = message;
-                box.className = 'gloss-status ' + (kind || '');
+        const data = await response.json();
+        if (data && data.gloss) {
+            renderPopover(container, data.gloss);
+            isRendered = true;
+            btn.style.display = 'none';
+            if (data.missing > 0) {
+                showStatus(`已标注 ${data.total - data.missing}/${data.total} 个词，${data.missing} 个未收录（可稍后重试）`, 'warn');
+            } else {
+                showStatus(`标注完成，共 ${data.total} 个词（${data.cached ? '缓存' : '词典首次查询已缓存'}），点击任意单词查看释义`, 'ok');
             }
         }
+    } catch (e) {
+        console.error(e);
+        showError(e.message || '加载失败，请重试。');
+    } finally {
+        resetTurnstile();
+        setBtnDone(btn, '重新加载标注');
+    }
+}
 
-        async function getGlossApi(token){
+/* ---- Explain ---- */
+document.getElementById('explain-btn').addEventListener('click', async function() {
+    const btn = this;
+    const panel = document.getElementById('explain-panel');
+    const container = document.getElementById('latin-content');
+    setBtnLoading(btn, '生成中...');
+    panel.hidden = false;
+    panel.innerHTML = '<em>正在生成整章讲解，首次需要调用模型，之后永久缓存…</em>';
+    try {
+        const params = new URLSearchParams({
+            work_id: container.dataset.workid,
+            path: container.dataset.path,
+        });
+        const response = await fetch(`/api/explain?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `服务返回 ${response.status}`);
+        panel.innerHTML = renderMarkdown(data.note);
+        btn.textContent = data.cached ? 'AI 讲解（已缓存）' : 'AI 讲解整章';
+    } catch (e) {
+        panel.innerHTML = `<em style="color:#b00020">讲解失败：${escapeHtml(e.message)}</em>`;
+        btn.textContent = '重试 AI 讲解';
+    } finally {
+        btn.disabled = false;
+    }
+});
 
-            const container = document.getElementById('latin-content');
-            const btn = document.getElementById('init-gloss-btn');
-            if (isRendered) return;
-            btn.disabled = true;
-            btn.textContent = '分析中...';
-            showStatus('正在分析全文，章节越长越久（首次需要调用模型，之后走缓存秒开）…');
-            try {
-                const params = new URLSearchParams({
-                    work_id: container.dataset.workid,
-                    path: container.dataset.path,
-                });
-                if (token) params.set('cf_token', token);
+/* ---- Markdown (light) ---- */
+function renderMarkdown(text) {
+    if (!text) return '';
+    let html = escapeHtml(text);
+    // headings
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    // bold / italic
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // lists
+    html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    // horizontal rule
+    html = html.replace(/^---+$/gm, '<hr>');
+    // newlines → <br> (outside pre/code)
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
-                const response = await fetch(`/api/gloss?${params.toString()}`);
-
-                if (!response.ok) {
-                    if (response.status === 429) {
-                        const retryAfter = response.headers.get('Retry-After');
-                        throw new Error(retryAfter ? `请求过于频繁，请在 ${retryAfter} 秒后再试。` : '请求过于频繁，请稍后再试。');
-                    }
-                    let msg = `服务返回 ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        msg = errorData.error || msg;
-                    } catch (_) { /* 非 JSON 响应 */ }
-                    throw new Error(msg);
-                }
-
-                const data = await response.json();
-
-                if (data && data.gloss) {
-                    renderPopover(container, data.gloss);
-                    isRendered = true;
-                    btn.style.display = 'none';
-                    const source = data.cached ? '本次来自缓存' : '本次由模型新生成并已缓存';
-                    if (data.missing > 0) {
-                        showStatus(`已完成 ${data.total - data.missing}/${data.total} 个词，${data.missing} 个未解析（结果未缓存，可稍后重试）`, 'warn');
+/* ---- Popover ---- */
+function renderPopover(container, glossArray) {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    const nodes = [];
+    while(walker.nextNode()) nodes.push(walker.currentNode);
+    let idx = 0;
+    const wordRegex = /([\p{L}]+)/gu;
+    nodes.forEach(node => {
+        const text = node.nodeValue;
+        const tokens = text.split(wordRegex);
+        const fragment = document.createDocumentFragment();
+        tokens.forEach(token => {
+            if (/[\p{L}]+/u.test(token) && idx < glossArray.length) {
+                const item = glossArray[idx];
+                const span = document.createElement('span');
+                span.className = 'word-wrapper';
+                const meaning = item.m || '';
+                const grammar = item.g || '';
+                span.innerHTML = token + '<div class="gloss-popover">'
+                    + (meaning ? '<span class="m-text">' + escapeHtml(meaning) + '</span>' : '<span class="m-text" style="opacity:0.4">—</span>')
+                    + (grammar ? ' <span class="g-text">' + escapeHtml(grammar) + '</span>' : '')
+                    + '</div>';
+                span.onclick = (e) => {
+                    e.stopPropagation();
+                    if (activeElement === span) {
+                        span.classList.remove('active');
+                        activeElement = null;
                     } else {
-                        showStatus(`标注完成，共 ${data.total} 个词（${source}），点击任意单词查看释义`, 'ok');
+                        if (activeElement) activeElement.classList.remove('active');
+                        span.classList.add('active');
+                        activeElement = span;
                     }
-                }
-            } catch (e) {
-                console.error(e);
-                showError(e.message || '加载失败，请重试。');
-            } finally {
-                resetTurnstile();
-            }
-        }
-        document.getElementById('explain-btn').addEventListener('click', async function() {
-            const btn = this;
-            const panel = document.getElementById('explain-panel');
-            const container = document.getElementById('latin-content');
-            btn.disabled = true;
-            btn.textContent = '讲解生成中…';
-            panel.hidden = false;
-            panel.textContent = '正在生成整章讲解，首次需要调用模型，之后永久缓存…';
-            try {
-                const params = new URLSearchParams({
-                    work_id: container.dataset.workid,
-                    path: container.dataset.path,
-                });
-                const response = await fetch(`/api/explain?${params.toString()}`);
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.error || `服务返回 ${response.status}`);
-                }
-                panel.textContent = data.cached ? data.note : data.note;
-                btn.textContent = data.cached ? 'AI 讲解（已缓存）' : 'AI 讲解整章';
-            } catch (e) {
-                panel.textContent = `讲解失败：${e.message}`;
-                btn.textContent = '重试 AI 讲解';
-            } finally {
-                btn.disabled = false;
+                };
+                fragment.appendChild(span);
+                idx++;
+            } else {
+                fragment.appendChild(document.createTextNode(token));
             }
         });
+        node.parentNode.replaceChild(fragment, node);
+    });
+}
 
-        function renderPopover(container, glossArray) {
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-            const nodes = [];
-            while(walker.nextNode()) nodes.push(walker.currentNode);
-
-            let idx = 0;
-            const wordRegex = /([\p{L}]+)/gu;
-
-            nodes.forEach(node => {
-                const text = node.nodeValue;
-                const tokens = text.split(wordRegex);
-                const fragment = document.createDocumentFragment();
-
-                tokens.forEach(token => {
-                    if (/[\p{L}]+/u.test(token) && idx < glossArray.length) {
-                        const item = glossArray[idx];
-                        const span = document.createElement('span');
-                        span.className = 'word-wrapper';
-                        
-                        // 内部结构
-                        span.innerHTML = `
-                            ${token}<div class="gloss-popover">
-                                <span class="m-text">${item.m || ''}</span>
-                                <span class="g-text">${item.g || ''}</span>
-                            </div>
-                        `;
-
-                        // 点击逻辑
-                        span.onclick = (e) => {
-                            e.stopPropagation();
-                            
-                            // 1. 如果点击的是当前已激活的 -> 关闭它
-                            if (activeElement === span) {
-                                span.classList.remove('active');
-                                activeElement = null;
-                            } else {
-                                // 2. 关闭之前激活的
-                                if (activeElement) activeElement.classList.remove('active');
-                                // 3. 激活当前的
-                                span.classList.add('active');
-                                activeElement = span;
-                            }
-                        };
-
-                        fragment.appendChild(span);
-                        idx++;
-                    } else {
-                        // 标点和空格原样保留
-                        fragment.appendChild(document.createTextNode(token));
-                    }
-                });
-                node.parentNode.replaceChild(fragment, node);
-            });
-        }
-
-        // 全局点击关闭逻辑
-        document.addEventListener('click', () => {
-            if (activeElement) {
-                activeElement.classList.remove('active');
-                activeElement = null;
-            }
-        });
-    </script>
+document.addEventListener('click', () => {
+    if (activeElement) {
+        activeElement.classList.remove('active');
+        activeElement = null;
+    }
+});
+</script>
 </body>
 </html>
