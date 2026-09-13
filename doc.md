@@ -145,7 +145,29 @@ uv run python -m pytest index/tests.py -v
 
 ## 标注模型与额度
 
-免费额度（RPD/RPM）很小，在线"点一次算一次"必然超时或 429，所以策略是**离线预热 + 在线只查缓存**。
+### 默认模型
+
+`gemini-3.5-flash-lite`（`index/llm.py:DEFAULT_GEMINI_MODEL`）。
+
+Gemini 2.x 已全面停用（`gemini-2.5-flash` 仍在但免费额度仅约 **20 次/天**，
+`2.5-flash-lite` / `2.0-flash` 直接返回 404）。当前可用：
+
+| 模型 | 实测 | 说明 |
+|---|---|---|
+| `gemini-3.5-flash-lite` | 约 2.5s / 短章 | **默认**，免费额度宽松 |
+| `gemini-3.5-flash` | 约 8-15s | 语法分析更细致，慢 3-4 倍 |
+| `gemini-3.8-flash` | 429 | 免费额度已不可用 |
+
+换模型：`LLM_MODEL=gemini-3.5-flash`（或 `LLM_PROVIDER=openai_compatible` + `LLM_BASE_URL`/`LLM_API_KEY`）。
+
+### 额度现实与应对
+
+免费额度按**请求次数**计，分块后一章要 1-3 次请求，所以：
+
+- **别指望全量标注**：288041 行正文不可能靠免费额度跑完
+- **策略：按需标注 + 永久缓存 + 离线预热**。用户点过的章节永久命中缓存（约 1 秒返回）
+- `GLOSS_CHUNK_WORDS`（默认 150）调大可减少请求数，但过大会被判 504（459 词整章一次必超时）
+- 每天跑一次 `prefetch_gloss.py` 慢慢积累，遇 429 脚本会自动停下
 
 ```bash
 # 1. 探针：模型通不通、返回能不能和词表对齐（不查缓存）
