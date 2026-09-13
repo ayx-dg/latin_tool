@@ -155,6 +155,7 @@ def complete(prompt: str, json_mode: bool = True) -> str:
         try:
             result = _PROVIDERS[name]().complete(prompt, json_mode=json_mode)
             _last_provider = name
+            logger.info("provider %s 调用成功", name)
             return result
         except Exception as exc:  # noqa: BLE001 - 换下一个 provider
             logger.warning("provider %s 调用失败，尝试下一个: %s", name, str(exc)[:200])
@@ -164,7 +165,9 @@ def complete(prompt: str, json_mode: bool = True) -> str:
 
 def get_last_provider() -> str:
     """返回最近一次 complete() 成功的 provider 名称。"""
-    return _last_provider or getattr(settings, "LLM_PROVIDER", "")
+    if _last_provider:
+        return _last_provider
+    return getattr(settings, "LLM_PROVIDER", "") or (provider_chain()[0] if provider_chain() else "")
 
 
 def reset_provider() -> None:
