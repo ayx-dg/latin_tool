@@ -201,6 +201,23 @@ RUN_LIVE_GLOSS=1 uv run pytest index/test_gloss_live.py -v -s   # 真实调模�
 测试统一走 `MyDjango/settings_test.py`（内存 SQLite），不会碰 Supabase；
 要针对真实库跑：`uv run pytest --ds=MyDjango.settings`。
 
+## 逐词标注与讲解
+
+两条链路分开：
+
+| 能力 | 数据源 | 是否调 AI |
+|---|---|---|
+| 逐词释义/形态 | 公开词典（英文维基词典拉丁语词条），落库 `dict_entry` 复用 | 否（`GLOSS_AI_WORDS=true` 时才对未收录词调模型） |
+| 整章讲解 | `/api/explain`，结果存 `chapter_note` | 是（整章一次，永久缓存） |
+
+```bash
+uv run python scripts/build_dict.py --top 300     # 预热高频词（纯词典，零 AI）
+uv run python scripts/fill_dict_zh.py --limit 200 # 可选：离线补中文释义
+```
+
+词典细节见 `index/dicts.py`：词形还原走 `{{inflection of|la|LEMMA|...}}`，
+屈折形式会自动回溯原形取释义（`divisa` → `dīvīsus`），长音符会做 ASCII 兜底查询。
+
 ## 提醒通道
 
 需要人工介入时：
