@@ -197,7 +197,9 @@ LLM_API_KEY = os.getenv('LLM_API_KEY', '')
 
 # Cloudflare Turnstile 人机验证，可关闭（本地开发或不想打断阅读体验时）
 # 注意：sitekey 绑定域名，换部署域名后要在 Cloudflare 后台把新域名加进 Allowed domains
-TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+# 默认关闭：Cloudflare 的验证脚本在部分网络（含国内）加载不全，会卡住整个标注流程。
+# 想启用就显式设 TURNSTILE_ENABLED=true，并确保 widget 域名白名单含部署域名。
+TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'false').lower() in ('1', 'true', 'yes')
 TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '0x4AAAAAADFFjr5kIkGQ6Hit')
 # siteverify 返回的 hostname 白名单。生产环境不要包含 localhost / 127.0.0.1
 TURNSTILE_HOSTNAMES = os.getenv('TURNSTILE_HOSTNAMES', 'localhost,127.0.0.1,latin-library.onrender.com')

@@ -27,6 +27,9 @@ services:
         sync: false
       - key: TURNSTILE_SECRET
         sync: false
+      - key: TURNSTILE_ENABLED
+        # Cloudflare 验证脚本在部分网络加载不全，默认关闭
+        value: "false"
       - key: TURNSTILE_HOSTNAMES
         # 生产环境不要包含 localhost / 127.0.0.1
         value: latin-library.onrender.com
