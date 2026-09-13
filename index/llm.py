@@ -21,7 +21,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+# gemini-2.x 已停用；3.5-flash-lite 免费额度更宽松且快 3-4 倍，
+# 想要更精准的语法分析可改 LLM_MODEL=gemini-3.5-flash（慢一些）。
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 class ProviderError(Exception):

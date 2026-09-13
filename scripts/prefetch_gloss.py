@@ -37,7 +37,7 @@ django.setup()
 from django.db.models import Min  # noqa: E402
 
 from index.models import Contents, Works  # noqa: E402
-from index.views import get_or_create_gloss  # noqa: E402
+from index.views import _missing_count, get_or_create_gloss  # noqa: E402
 
 QUOTA_MARKERS = ("429", "resource_exhaust", "quota", "rate limit", "rate_limit")
 
@@ -98,7 +98,7 @@ def main() -> int:
 
         try:
             gloss_data, text_hash = get_or_create_gloss(text)
-            missing = sum(1 for it in gloss_data if not it.get("m"))
+            missing = _missing_count(gloss_data)
             status = "ok" if missing == 0 else f"缺 {missing} 词(未缓存)"
             print(f"{label} -> {status} hash={text_hash[:8]}")
             done += 1

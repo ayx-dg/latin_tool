@@ -23,7 +23,7 @@ _model = None
 if getattr(settings, "GEMINI_API_KEY", ""):
     genai.configure(api_key=settings.GEMINI_API_KEY)
     _model = genai.GenerativeModel(
-        getattr(settings, "LLM_MODEL", "") or "gemini-2.5-flash"
+        getattr(settings, "LLM_MODEL", "") or llm.DEFAULT_GEMINI_MODEL
     )
 
 
@@ -40,6 +40,9 @@ def check_rate_limit(key, limit, period):
 
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 GLOSS_ACTION = "gloss"
+# 降级占位文案。统计"缺失"时必须把带这个标记的词也算进去，
+# 否则整章失败会被误判为成功。
+FAILED_MARK = "解析失败"
 
 
 def _client_ip(request):
@@ -126,7 +129,12 @@ Return exactly {len(words_only)} objects. Return ONLY the JSON object.
 
 def _fallback_gloss(full_text):
     words = _extract_words(full_text) or full_text.split()
-    return [{"w": w, "m": "解析失败", "g": ""} for w in words]
+    return [{"w": w, "m": FAILED_MARK, "g": ""} for w in words]
+
+
+def _missing_count(items):
+    """没拿到释义的词数：空值或降级占位都算缺失。"""
+    return sum(1 for item in items if not item.get("m") or item["m"] == FAILED_MARK)
 
 
 def _parse_items(raw):
@@ -198,7 +206,7 @@ def _gloss_words_with_retry(words):
         if attempt < retries:
             time.sleep(2 ** attempt)
 
-    return [{"w": w, "m": "解析失败", "g": ""} for w in words], len(words)
+    return [{"w": w, "m": FAILED_MARK, "g": ""} for w in words], len(words)
 
 
 def _call_provider_with_retry(words, chunk_size=None):
@@ -312,7 +320,7 @@ def api_get_gloss(request):
         was_cached = GlossCache.objects.filter(text_hash=text_hash).exists()
 
         gloss_data, _ = get_or_create_gloss(full_text)
-        missing = sum(1 for item in gloss_data if not item.get('m'))
+        missing = _missing_count(gloss_data)
         return JsonResponse({
             'status': 'success' if missing == 0 else 'partial',
             'work_id': work_id,
