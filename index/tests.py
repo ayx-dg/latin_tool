@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import django
 from index.models import GlossCache
+from index import llm
 from index.views import (
     _extract_words,
     _build_gloss_prompt,
@@ -115,20 +116,17 @@ class TestCallProviderRetry:
     def test_returns_aligned_result_without_retry(self):
         words = ["arma"]
         payload = {"items": [{"i": 1, "m": "武器", "g": "名词"}]}
-        fake_model = MagicMock()
-        fake_model.generate_content.return_value = MagicMock(text=json.dumps(payload))
-        with patch("index.views._model", fake_model):
+        with patch("index.llm.complete", return_value=json.dumps(payload)) as complete:
             items, missing = _call_provider_with_retry("prompt", words)
         assert missing == 0
         assert items[0]["m"] == "武器"
-        assert fake_model.generate_content.call_count == 1
+        assert complete.call_count == 1
 
     def test_retries_then_falls_back_on_error(self):
-        fake_model = MagicMock()
-        fake_model.generate_content.side_effect = RuntimeError("429 quota")
-        with patch("index.views._model", fake_model), patch("index.views.time.sleep"):
+        with patch("index.llm.complete", side_effect=RuntimeError("429 quota")) as complete, \
+             patch("index.views.time.sleep"):
             items, missing = _call_provider_with_retry("prompt", ["a", "b"])
-        assert fake_model.generate_content.call_count == 3  # 初次 + 2 次重试
+        assert complete.call_count == 3  # 初次 + 2 次重试
         assert missing == 2
         assert all(i["m"] == "解析失败" for i in items)
 
@@ -225,6 +223,62 @@ class TestVerifyCaptcha:
     def test_rejects_when_hostnames_not_configured(self):
         (ok, reason), _ = self._call("t", {"success": True}, hostnames="")
         assert ok is False and reason == "server-misconfigured"
+
+
+class TestLLMProvider:
+    """provider 由环境变量决定，换模型不该改代码。"""
+
+    def setup_method(self):
+        llm.reset_provider()
+
+    def test_gemini_provider_is_used_when_configured(self):
+        with override_settings(LLM_PROVIDER="gemini", GEMINI_API_KEY="k", LLM_MODEL=""), \
+             patch("google.generativeai.GenerativeModel"):
+            assert llm.get_provider().name == "gemini"
+
+    def test_openai_compatible_requires_key_and_model(self):
+        with override_settings(LLM_PROVIDER="openai_compatible", LLM_API_KEY="", LLM_MODEL="m"):
+            with pytest.raises(llm.ProviderError):
+                llm.get_provider()
+        llm.reset_provider()
+        with override_settings(LLM_PROVIDER="openai_compatible", LLM_API_KEY="k", LLM_MODEL=""):
+            with pytest.raises(llm.ProviderError):
+                llm.get_provider()
+
+    def test_unknown_provider_raises(self):
+        with override_settings(LLM_PROVIDER="nope"):
+            with pytest.raises(llm.ProviderError):
+                llm.get_provider()
+
+    def test_openai_compatible_request_shape(self):
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content='{"items":[]}'))]
+        )
+        with override_settings(
+            LLM_PROVIDER="openai_compatible",
+            LLM_API_KEY="k",
+            LLM_MODEL="deepseek-chat",
+            LLM_BASE_URL="https://api.example.com/v1",
+            GLOSS_TIMEOUT=30,
+        ), patch("openai.OpenAI", return_value=fake_client) as openai_ctor:
+            provider = llm.get_provider()
+            output = provider.complete("prompt")
+
+        assert output == '{"items":[]}'
+        assert openai_ctor.call_args.kwargs["base_url"] == "https://api.example.com/v1"
+        assert openai_ctor.call_args.kwargs["timeout"] == 30
+        kwargs = fake_client.chat.completions.create.call_args.kwargs
+        assert kwargs["model"] == "deepseek-chat"
+        assert kwargs["response_format"] == {"type": "json_object"}
+        assert kwargs["temperature"] == 0
+
+    def test_complete_wraps_unexpected_errors(self):
+        with override_settings(LLM_PROVIDER="gemini", GEMINI_API_KEY="k", LLM_MODEL=""):
+            llm.reset_provider()
+            with patch.object(llm.GeminiProvider, "complete", side_effect=ValueError("boom")):
+                with pytest.raises(llm.ProviderError):
+                    llm.complete("prompt")
 
 
 class TestCheckRateLimit:

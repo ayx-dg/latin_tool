@@ -186,6 +186,13 @@ else:
 GLOSS_TIMEOUT = float(os.getenv('GLOSS_TIMEOUT', '60'))
 GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
 
+# 模型 provider：gemini（Google AI Studio）或 openai_compatible（DeepSeek / OpenRouter /
+# Groq / Azure AI Foundry / Gemini 的 OpenAI 兼容端点）。换模型只改环境变量。
+LLM_PROVIDER = os.getenv('LLM_PROVIDER') or ('gemini' if os.getenv('GEMINI_API_KEY') else 'openai_compatible')
+LLM_BASE_URL = os.getenv('LLM_BASE_URL', '')
+LLM_MODEL = os.getenv('LLM_MODEL', '')
+LLM_API_KEY = os.getenv('LLM_API_KEY', '')
+
 # Cloudflare Turnstile 人机验证，可关闭（本地开发或不想打断阅读体验时）
 # 注意：sitekey 绑定域名，换部署域名后要在 Cloudflare 后台把新域名加进 Allowed domains
 TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'true').lower() in ('1', 'true', 'yes')

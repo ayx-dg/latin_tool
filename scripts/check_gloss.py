@@ -26,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MyDjango.settings")
 django.setup()
 
-from index.views import _build_gloss_prompt, _extract_words, _model  # noqa: E402
+from index import llm  # noqa: E402
+from index.views import _align_items, _build_gloss_prompt, _extract_words  # noqa: E402
 
 SAMPLE = "Gallia est omnis divisa in partes tres."
 
@@ -48,15 +49,15 @@ def classify_error(exc: Exception) -> str:
 def call_provider(text: str):
     """直接打模型，不查缓存。返回 (items, latency, error)。"""
     prompt = _build_gloss_prompt(text)
+    words = _extract_words(text)
     start = time.monotonic()
     try:
-        response = _model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"},
-        )
-        items = json.loads(response.text)
+        raw = llm.complete(prompt)
+        items, missing = _align_items(words, json.loads(raw))
     except Exception as exc:  # noqa: BLE001 - 探针需要看到所有失败形态
         return None, time.monotonic() - start, exc
+    if missing:
+        return items, time.monotonic() - start, RuntimeError(f"{missing}/{len(words)} 个词没对齐")
     return items, time.monotonic() - start, None
 
 
@@ -87,7 +88,11 @@ def main() -> int:
     if args.max_words:
         words = words[: args.max_words]
         text = " ".join(words)
-    print(f"模型: {_model.model_name}")
+    try:
+        print(f"provider: {llm.get_provider().name}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"provider 初始化失败: {exc}")
+        return 1
     print(f"词数: {len(words)}  样例: {words[:8]}")
 
     failures = 0

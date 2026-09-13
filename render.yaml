@@ -27,5 +27,17 @@ services:
         sync: false
       - key: TURNSTILE_SECRET
         sync: false
+      - key: TURNSTILE_HOSTNAMES
+        # 生产环境不要包含 localhost / 127.0.0.1
+        value: latin-library.onrender.com
+      # 换模型只改这几个，不用改代码
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
       - key: PORT
         value: "8000"

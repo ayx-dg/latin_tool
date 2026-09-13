@@ -13,12 +13,18 @@ from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 
+from . import llm
 from .models import Works, Contents, GlossCache
 
 logger = logging.getLogger(__name__)
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
-_model = genai.GenerativeModel('gemini-2.5-flash')
+# 兼容旧引用：探针脚本和老代码可能会用到 _model
+_model = None
+if getattr(settings, "GEMINI_API_KEY", ""):
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    _model = genai.GenerativeModel(
+        getattr(settings, "LLM_MODEL", "") or "gemini-2.5-flash"
+    )
 
 
 def check_rate_limit(key, limit, period):
@@ -177,12 +183,8 @@ def _call_provider_with_retry(prompt, words):
 
     for attempt in range(retries + 1):
         try:
-            response = _model.generate_content(
-                prompt,
-                generation_config={"response_mime_type": "application/json"},
-                request_options={"timeout": timeout},
-            )
-            items, missing = _align_items(words, json.loads(response.text))
+            raw = llm.complete(prompt)
+            items, missing = _align_items(words, json.loads(raw))
             if missing == 0:
                 return items, 0
             last_error = f"数量/索引对不上：{missing}/{len(words)} 个词缺失"
@@ -280,6 +282,9 @@ def api_get_gloss(request):
         segments = Contents.objects.filter(work_id=work_id, path=path).order_by('global_order')
         full_text = " ".join([s.text for s in segments])
         full_text = re.sub(r'(?<=\w)\s+(?=[.,!?;:])', '', full_text)
+        text_hash = hashlib.md5(full_text.encode('utf-8')).hexdigest()
+        was_cached = GlossCache.objects.filter(text_hash=text_hash).exists()
+
         gloss_data, _ = get_or_create_gloss(full_text)
         missing = sum(1 for item in gloss_data if not item.get('m'))
         return JsonResponse({
@@ -289,6 +294,7 @@ def api_get_gloss(request):
             'gloss': gloss_data,
             'missing': missing,
             'total': len(gloss_data),
+            'cached': was_cached,
         })
     except Exception as e:  # noqa: BLE001
         logger.exception("生成标注失败")

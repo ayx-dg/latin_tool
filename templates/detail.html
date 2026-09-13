@@ -284,10 +284,11 @@
                     renderPopover(container, data.gloss);
                     isRendered = true;
                     btn.style.display = 'none';
+                    const source = data.cached ? '本次来自缓存' : '本次由模型新生成并已缓存';
                     if (data.missing > 0) {
                         showStatus(`已完成 ${data.total - data.missing}/${data.total} 个词，${data.missing} 个未解析（结果未缓存，可稍后重试）`, 'warn');
                     } else {
-                        showStatus(`标注完成，共 ${data.total} 个词，点击任意单词查看释义`, 'ok');
+                        showStatus(`标注完成，共 ${data.total} 个词（${source}），点击任意单词查看释义`, 'ok');
                     }
                 }
             } catch (e) {
