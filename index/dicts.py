@@ -102,7 +102,11 @@ def _parse_gloss(section: str) -> str:
         line = line.strip()
         if not line.startswith("#") or line.startswith("#:"):
             continue
-        cleaned = _strip_templates(line.lstrip("#*").strip())
+        raw = line.lstrip("#*").strip()
+        # 冒号开头的是引文/用例（"#: Germania omnis…"），不是释义
+        if raw.startswith(":") or raw.startswith("*"):
+            continue
+        cleaned = _strip_templates(raw)
         if not cleaned or "inflection of" in cleaned.lower():
             continue
         # 跳过引文/参考文献行（"Tacitus, Gemanica, chapter 1 (Oxford…)" 之类）
