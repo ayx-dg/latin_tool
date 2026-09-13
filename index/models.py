@@ -31,6 +31,41 @@ class Works(models.Model):
         managed = False
         db_table = 'works'
 
+class DictEntry(models.Model):
+    """公开词典条目：逐词标注的主力数据源，一次收录永久复用。"""
+
+    word_form = models.CharField(max_length=64, unique=True, db_index=True)
+    lemma = models.CharField(max_length=64, blank=True, default='')
+    pos = models.CharField(max_length=64, blank=True, default='')
+    morph = models.CharField(max_length=255, blank=True, default='')  # 格/数/时态等
+    gloss_en = models.TextField(blank=True, default='')
+    gloss_zh = models.TextField(blank=True, default='')  # 由离线脚本用 AI 批量补
+    source = models.CharField(max_length=32, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'dict_entry'
+
+    def __str__(self):
+        return f"{self.word_form} -> {self.lemma or self.word_form}"
+
+
+class ChapterNote(models.Model):
+    """AI 讲解：整章一次生成，永久缓存。"""
+
+    work_id = models.IntegerField()
+    path = models.TextField()
+    text_hash = models.CharField(max_length=64, db_index=True)
+    note = models.TextField()
+    provider = models.CharField(max_length=32, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'chapter_note'
+        unique_together = ('work_id', 'text_hash')
+
+
 class GlossCache(models.Model):
     # 使用文本的 MD5 哈希作为 Key，方便快速查找
     text_hash = models.CharField(max_length=64, unique=True, db_index=True)

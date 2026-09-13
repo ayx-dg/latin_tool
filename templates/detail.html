@@ -129,6 +129,24 @@
 .gloss-status.error { color: #b00020; }
 .gloss-status.warn  { color: #a15c00; }
 .gloss-status.ok    { color: #0a7a3d; }
+
+#explain-btn {
+    padding: 6px 14px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.explain-panel {
+    margin-top: 10px;
+    padding: 14px 16px;
+    max-width: 720px;
+    text-align: left;
+    background: #fafafa;
+    border: 1px solid #e3e3e3;
+    border-radius: 6px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+}
         #init-gloss-btn {
             padding: 10px 24px;
             background: #2c3e50;
@@ -165,6 +183,8 @@
         <button id="init-gloss-btn">加载原文分析</button>
         <div id="captcha-container" data-sitekey=""></div>
         <div id="gloss-status" class="gloss-status"></div>
+        <button id="explain-btn" class="secondary">AI 讲解整章</button>
+        <div id="explain-panel" class="explain-panel" hidden></div>
     </div>
 
     <article id="latin-content" 
@@ -298,6 +318,34 @@
                 resetTurnstile();
             }
         }
+        document.getElementById('explain-btn').addEventListener('click', async function() {
+            const btn = this;
+            const panel = document.getElementById('explain-panel');
+            const container = document.getElementById('latin-content');
+            btn.disabled = true;
+            btn.textContent = '讲解生成中…';
+            panel.hidden = false;
+            panel.textContent = '正在生成整章讲解，首次需要调用模型，之后永久缓存…';
+            try {
+                const params = new URLSearchParams({
+                    work_id: container.dataset.workid,
+                    path: container.dataset.path,
+                });
+                const response = await fetch(`/api/explain?${params.toString()}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || `服务返回 ${response.status}`);
+                }
+                panel.textContent = data.cached ? data.note : data.note;
+                btn.textContent = data.cached ? 'AI 讲解（已缓存）' : 'AI 讲解整章';
+            } catch (e) {
+                panel.textContent = `讲解失败：${e.message}`;
+                btn.textContent = '重试 AI 讲解';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
         function renderPopover(container, glossArray) {
             const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
             const nodes = [];

@@ -187,13 +187,28 @@ GLOSS_TIMEOUT = float(os.getenv('GLOSS_TIMEOUT', '60'))
 GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
 # 单次请求的最大词数：整章一次请求会被 Gemini 判 504，必须分块
 GLOSS_CHUNK_WORDS = int(os.getenv('GLOSS_CHUNK_WORDS', '150'))
+# 词典没收录的词是否调用模型补（默认关：AI 只用于整章讲解）
+GLOSS_AI_WORDS = os.getenv('GLOSS_AI_WORDS', 'false').lower() in ('1', 'true', 'yes')
+# 只把 unique 词形发给模型再展开：省 40-60% 输出 token，代价是丢失上下文（同形词共用释义）
+GLOSS_DEDUPE = os.getenv('GLOSS_DEDUPE', 'false').lower() in ('1', 'true', 'yes')
 
-# 模型 provider：gemini（Google AI Studio）或 openai_compatible（DeepSeek / OpenRouter /
-# Groq / Azure AI Foundry / Gemini 的 OpenAI 兼容端点）。换模型只改环境变量。
-LLM_PROVIDER = os.getenv('LLM_PROVIDER') or ('gemini' if os.getenv('GEMINI_API_KEY') else 'openai_compatible')
+# 模型 provider：gemini（Google AI Studio）或 openai_compatible（OpenAI 兼容端点）
+# 腾讯云 Token Plan 个人版：HY_API_KEY + base https://api.lkeap.cloud.tencent.com/plan/v3
+HY_API_KEY = os.getenv('HY_API_KEY', '')
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', '')
 LLM_MODEL = os.getenv('LLM_MODEL', '')
 LLM_API_KEY = os.getenv('LLM_API_KEY', '')
+if HY_API_KEY and not LLM_API_KEY:
+    LLM_API_KEY = HY_API_KEY
+    LLM_BASE_URL = LLM_BASE_URL or 'https://api.lkeap.cloud.tencent.com/plan/v3'
+    LLM_MODEL = LLM_MODEL or 'deepseek-v4-flash-202605'
+# Gemini 专用模型名（不要和 LLM_MODEL 混用，两套模型体系不通用）
+LLM_GEMINI_MODEL = os.getenv('LLM_GEMINI_MODEL', '')
+LLM_PROVIDER = os.getenv('LLM_PROVIDER') or (
+    'openai_compatible' if LLM_API_KEY else ('gemini' if os.getenv('GEMINI_API_KEY') else 'openai_compatible')
+)
+# 逗号分隔的回退顺序，留空则自动：Token Plan -> Gemini
+LLM_PROVIDERS = os.getenv('LLM_PROVIDERS', '')
 
 # Cloudflare Turnstile 人机验证，可关闭（本地开发或不想打断阅读体验时）
 # 注意：sitekey 绑定域名，换部署域名后要在 Cloudflare 后台把新域名加进 Allowed domains

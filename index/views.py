@@ -13,8 +13,8 @@ from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.csrf import csrf_exempt
 
-from . import llm
-from .models import Works, Contents, GlossCache
+from . import dicts, llm
+from .models import ChapterNote, Works, Contents, DictEntry, GlossCache
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ _model = None
 if getattr(settings, "GEMINI_API_KEY", ""):
     genai.configure(api_key=settings.GEMINI_API_KEY)
     _model = genai.GenerativeModel(
-        getattr(settings, "LLM_MODEL", "") or llm.DEFAULT_GEMINI_MODEL
+        getattr(settings, "LLM_GEMINI_MODEL", "") or llm.DEFAULT_GEMINI_MODEL
     )
 
 
@@ -209,15 +209,8 @@ def _gloss_words_with_retry(words):
     return [{"w": w, "m": FAILED_MARK, "g": ""} for w in words], len(words)
 
 
-def _call_provider_with_retry(words, chunk_size=None):
-    """长章节分块请求再合并：整章一次请求会被 Gemini 判 504 超时。
-
-    返回 (items, missing)。
-    """
-    if chunk_size is None:
-        chunk_size = int(getattr(settings, "GLOSS_CHUNK_WORDS", 150))
-    if not words:
-        return [], 0
+def _chunked_gloss(words, chunk_size):
+    """长章节分块请求再合并：整章一次请求会被判 504 超时。"""
     if chunk_size <= 0 or len(words) <= chunk_size:
         return _gloss_words_with_retry(words)
 
@@ -232,7 +225,63 @@ def _call_provider_with_retry(words, chunk_size=None):
     return merged, total_missing
 
 
+def _expand_unique(unique_items, words):
+    """把「只标 unique 词形」的结果按原文顺序展开。"""
+    lookup = {}
+    for item in unique_items:
+        if item.get("w") and (item.get("m") or item.get("g")):
+            lookup[item["w"]] = (item.get("m", ""), item.get("g", ""))
+
+    expanded = []
+    missing = 0
+    for word in words:
+        if word in lookup:
+            meaning, grammar = lookup[word]
+            expanded.append({"w": word, "m": meaning, "g": grammar})
+        else:
+            expanded.append({"w": word, "m": FAILED_MARK, "g": ""})
+            missing += 1
+    return expanded, missing
+
+
+def _call_provider_with_retry(words, chunk_size=None):
+    """调用模型拿到与 words 等长、同序的标注。返回 (items, missing)。"""
+    if chunk_size is None:
+        chunk_size = int(getattr(settings, "GLOSS_CHUNK_WORDS", 150))
+    if not words:
+        return [], 0
+
+    # 拉丁文重复词极多（est / et / in …），只标 unique 词形可省 40-60% 输出 token。
+    # 代价是丢失上下文，同一个词形的多种形态会共用释义。
+    if getattr(settings, "GLOSS_DEDUPE", False):
+        unique = list(dict.fromkeys(words))
+        unique_items, _missing = _chunked_gloss(unique, chunk_size)
+        logger.info("去重标注: %s 词 -> %s 个 unique", len(words), len(unique))
+        return _expand_unique(unique_items, words)
+
+    return _chunked_gloss(words, chunk_size)
+
+
+def _build_explain_prompt(full_text):
+    return f"""你是拉丁语教师，请用中文讲解下面这段拉丁文（面向初学者）：
+
+1. 用两三句话概括大意（中译）
+2. 指出 2-3 个语法/词法难点（如夺格、分词、虚拟式）
+3. 挑 1-2 个难句逐词说明
+
+要求：中文回答，条理清晰，不要重复原文。
+
+原文：
+{full_text[:4000]}
+"""
+
+
 def get_or_create_gloss(full_text):
+    """逐词标注：公开词典优先（免费、即时、无需人机验证）。
+
+    只有 GLOSS_AI_WORDS=true 时才对词典没收录的词调用模型；
+    AI 的主要用途是整章讲解（api_explain）。
+    """
     if not full_text.strip():
         return [], ""
     text_hash = hashlib.md5(full_text.encode('utf-8')).hexdigest()
@@ -241,7 +290,16 @@ def get_or_create_gloss(full_text):
         return cached.gloss_data, text_hash
 
     words = _extract_words(full_text)
-    gloss_data, missing = _call_provider_with_retry(words)
+    gloss_data = dicts.gloss_words(words)
+    missing = _missing_count(gloss_data)
+
+    if missing and getattr(settings, "GLOSS_AI_WORDS", False):
+        ai_items, _ai_missing = _call_provider_with_retry(words)
+        merged = []
+        for item, ai in zip(gloss_data, ai_items):
+            merged.append(ai if (not item.get("m") and ai.get("m")) else item)
+        gloss_data = merged
+        missing = _missing_count(gloss_data)
 
     if missing:
         # 错位的结果绝不能写进缓存，否则以后永远读到错误标注
@@ -297,6 +355,39 @@ def work_redirect(request, work_id):
 
 
 # --- API ---
+
+@csrf_exempt
+def api_explain(request):
+    """整章 AI 讲解：一次调用，结果永久缓存。"""
+    work_id = request.GET.get('work_id')
+    path = request.GET.get('path')
+
+    if not (work_id and path):
+        return JsonResponse({'error': 'Missing parameters.'}, status=400)
+
+    segments = Contents.objects.filter(work_id=work_id, path=path).order_by('global_order')
+    full_text = " ".join([s.text for s in segments])
+    full_text = re.sub(r'(?<=\w)\s+(?=[.,!?;:])', '', full_text)
+    if not full_text.strip():
+        return JsonResponse({'error': '章节为空。'}, status=404)
+
+    text_hash = hashlib.md5(full_text.encode('utf-8')).hexdigest()
+    note = ChapterNote.objects.filter(work_id=work_id, text_hash=text_hash).first()
+    if note:
+        return JsonResponse({'status': 'success', 'note': note.note, 'cached': True, 'provider': note.provider})
+
+    try:
+        answer = llm.complete(_build_explain_prompt(full_text), json_mode=False)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("生成讲解失败")
+        return JsonResponse({'error': f'讲解服务暂时不可用：{exc}'}, status=503)
+
+    ChapterNote.objects.create(
+        work_id=work_id, path=path, text_hash=text_hash,
+        note=answer, provider=getattr(settings, "LLM_PROVIDER", ""),
+    )
+    return JsonResponse({'status': 'success', 'note': answer, 'cached': False})
+
 
 @csrf_exempt
 def api_get_gloss(request):

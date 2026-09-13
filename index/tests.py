@@ -5,15 +5,18 @@ from django.test import override_settings
 from unittest.mock import MagicMock, patch
 
 import django
-from index.models import GlossCache
+from index import views
+from index.models import ChapterNote, DictEntry, GlossCache
 from index import llm
 from index.views import (
+    FAILED_MARK,
     _extract_words,
     _build_gloss_prompt,
     _fallback_gloss,
     _parse_items,
     _align_items,
     _call_provider_with_retry,
+    _expand_unique,
     get_or_create_gloss,
     check_rate_limit,
 )
@@ -140,6 +143,33 @@ class TestCallProviderRetry:
         assert missing == 0
         assert [i["m"] for i in items] == [f"含义-w{i}" for i in range(5)]
 
+    def test_dedupe_expands_unique_results_back_to_full_text(self):
+        words = ["Gallia", "est", "omnis", "est", "divisa"]  # est 出现两次
+
+        def fake_complete(prompt):
+            chunk = [
+                line.split(". ", 1)[1]
+                for line in prompt.splitlines()
+                if ". " in line and line.split(".", 1)[0].strip().isdigit()
+            ]
+            return json.dumps({"items": [{"i": i + 1, "m": f"含义-{w}"} for i, w in enumerate(chunk)]})
+
+        with override_settings(GLOSS_DEDUPE=True), \
+             patch("index.llm.complete", side_effect=fake_complete) as complete:
+            items, missing = _call_provider_with_retry(words)
+        # 只请求了一块：4 个 unique 词
+        assert complete.call_count == 1
+        assert missing == 0
+        assert [i["m"] for i in items] == ["含义-Gallia", "含义-est", "含义-omnis", "含义-est", "含义-divisa"]
+
+    def test_dedupe_counts_repeated_words_as_missing(self):
+        words = ["a", "b", "a"]
+        items = [{"w": "a", "m": "甲", "g": ""}]  # b 没被标上
+        with override_settings(GLOSS_DEDUPE=True):
+            expanded, missing = _expand_unique(items, words)
+        assert missing == 1  # 只有 b 缺失，重复出现的 a 不算
+        assert [i["m"] for i in expanded] == ["甲", FAILED_MARK, "甲"]
+
     def test_retries_then_falls_back_on_error(self):
         with patch("index.llm.complete", side_effect=RuntimeError("429 quota")) as complete, \
              patch("index.views.time.sleep"):
@@ -165,19 +195,38 @@ class TestGetOrCreateGloss:
             gloss_data, text_hash = get_or_create_gloss("test")
             assert gloss_data == [{"w": "test", "m": "测试", "g": "名词"}]
 
-    def test_misaligned_result_is_not_cached(self):
-        """错位结果写进缓存会永久污染，必须拒绝。"""
-        with patch("index.views._call_provider_with_retry") as mock_call:
-            mock_call.return_value = ([{"w": "alpha", "m": "", "g": ""}], 1)
-            get_or_create_gloss("alpha beta")
-        assert GlossCache.objects.count() == 0
-
-    def test_aligned_result_is_cached(self):
-        with patch("index.views._call_provider_with_retry") as mock_call:
-            mock_call.return_value = ([{"w": "alpha", "m": "第一", "g": "形容词"}], 0)
+    def test_dictionary_gloss_is_cached(self):
+        """默认路径：公开词典提供释义，完全不调用模型。"""
+        entry = DictEntry(word_form="alpha", gloss_zh="第一", pos="形容词")
+        with patch("index.views.dicts.lookup", return_value={"alpha": entry}):
             gloss_data, _ = get_or_create_gloss("alpha")
         assert gloss_data[0]["m"] == "第一"
         assert GlossCache.objects.count() == 1
+
+    def test_model_is_not_called_by_default(self):
+        """AI 只用于讲解，逐词标注默认不碰模型。"""
+        with patch("index.views.dicts.lookup", return_value={}), \
+             patch("index.views._call_provider_with_retry") as mock_call:
+            get_or_create_gloss("alpha beta")
+        assert mock_call.call_count == 0
+
+    def test_ai_fills_missing_words_only_when_enabled(self):
+        with patch("index.views.dicts.lookup", return_value={}), \
+             patch("index.views._call_provider_with_retry") as mock_call:
+            mock_call.return_value = ([{"w": "alpha", "m": "第一", "g": "形容词"}], 0)
+            with override_settings(GLOSS_AI_WORDS=True):
+                gloss_data, _ = get_or_create_gloss("alpha")
+        assert mock_call.call_count == 1
+        assert gloss_data[0]["m"] == "第一"
+
+    def test_misaligned_result_is_not_cached(self):
+        """错位结果写进缓存会永久污染，必须拒绝。"""
+        with patch("index.views.dicts.lookup", return_value={}), \
+             patch("index.views._call_provider_with_retry") as mock_call:
+            mock_call.return_value = ([{"w": "alpha", "m": "", "g": ""}], 1)
+            with override_settings(GLOSS_AI_WORDS=True):
+                get_or_create_gloss("alpha")
+        assert GlossCache.objects.count() == 0
 
 
 class TestVerifyCaptcha:
@@ -297,6 +346,38 @@ class TestLLMProvider:
             with patch.object(llm.GeminiProvider, "complete", side_effect=ValueError("boom")):
                 with pytest.raises(llm.ProviderError):
                     llm.complete("prompt")
+
+
+@pytest.mark.django_db
+class TestApiExplain:
+    def test_explain_generates_and_caches(self, rf=None):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/api/explain", {"work_id": "1", "path": "p1"})
+        with patch("index.views.Contents.objects.filter") as mock_filter:
+            mock_filter.return_value.order_by.return_value = [type("S", (), {"text": "Gallia est omnis divisa."})()]
+            with patch("index.llm.complete", return_value="这是凯撒《高卢战记》开篇。") as complete:
+                response = views.api_explain(request)
+        assert response.status_code == 200
+        assert json.loads(response.content)["cached"] is False
+        assert complete.call_count == 1
+
+        # 第二次直接命中缓存，不再调用模型
+        with patch("index.views.Contents.objects.filter") as mock_filter2:
+            mock_filter2.return_value.order_by.return_value = [type("S", (), {"text": "Gallia est omnis divisa."})()]
+            with patch("index.llm.complete", side_effect=AssertionError("不应再次调用模型")):
+                response2 = views.api_explain(request)
+        assert json.loads(response2.content)["cached"] is True
+
+    def test_explain_returns_503_when_model_fails(self):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/api/explain", {"work_id": "1", "path": "p1"})
+        with patch("index.views.Contents.objects.filter") as mock_filter:
+            mock_filter.return_value.order_by.return_value = [type("S", (), {"text": "arma virumque cano."})()]
+            with patch("index.llm.complete", side_effect=RuntimeError("quota")):
+                response = views.api_explain(request)
+        assert response.status_code == 503
 
 
 class TestCheckRateLimit:

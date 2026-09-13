@@ -15,7 +15,7 @@ openai_compatible 覆盖：DeepSeek、OpenRouter、Groq、Azure AI Foundry、
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from django.conf import settings
 
@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 # gemini-2.x 已停用；3.5-flash-lite 免费额度更宽松且快 3-4 倍，
 # 想要更精准的语法分析可改 LLM_MODEL=gemini-3.5-flash（慢一些）。
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+# 腾讯云 Token Plan 个人版（OpenAI 兼容）：base = https://api.lkeap.cloud.tencent.com/plan/v3
+DEFAULT_HY_BASE_URL = "https://api.lkeap.cloud.tencent.com/plan/v3"
+DEFAULT_HY_MODEL = "deepseek-v4-flash-202605"
 
 
 class ProviderError(Exception):
@@ -33,8 +36,8 @@ class ProviderError(Exception):
 class BaseProvider:
     name = "base"
 
-    def complete(self, prompt: str) -> str:
-        """返回模型输出的原始文本（JSON 字符串）。"""
+    def complete(self, prompt: str, json_mode: bool = True) -> str:
+        """返回模型输出。json_mode=False 时不要强制 JSON（讲解用纯文本）。"""
         raise NotImplementedError
 
 
@@ -48,13 +51,18 @@ class GeminiProvider(BaseProvider):
         if not api_key:
             raise ProviderError("未配置 GEMINI_API_KEY")
         genai.configure(api_key=api_key)
-        model_name = getattr(settings, "LLM_MODEL", "") or DEFAULT_GEMINI_MODEL
+        # LLM_MODEL 是给 OpenAI 兼容端点用的，Gemini 必须用 Gemini 自己的模型名
+        model_name = (
+            getattr(settings, "LLM_GEMINI_MODEL", "")
+            or DEFAULT_GEMINI_MODEL
+        )
         self._model = genai.GenerativeModel(model_name)
 
-    def complete(self, prompt: str) -> str:
+    def complete(self, prompt: str, json_mode: bool = True) -> str:
+        config = {"response_mime_type": "application/json"} if json_mode else None
         response = self._model.generate_content(
             prompt,
-            generation_config={"response_mime_type": "application/json"},
+            generation_config=config,
             request_options={"timeout": float(getattr(settings, "GLOSS_TIMEOUT", 60))},
         )
         return response.text
@@ -78,18 +86,19 @@ class OpenAICompatibleProvider(BaseProvider):
             timeout=float(getattr(settings, "GLOSS_TIMEOUT", 60)),
         )
 
-    def complete(self, prompt: str) -> str:
+    def complete(self, prompt: str, json_mode: bool = True) -> str:
+        system = ("You are a Latin philology assistant. Always answer with valid JSON only."
+                  if json_mode else
+                  "You are a Latin philology assistant teaching a Chinese-speaking student.")
+        extra = {"response_format": {"type": "json_object"}} if json_mode else {}
         response = self.client.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a Latin philology assistant. Always answer with valid JSON only.",
-                },
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            response_format={"type": "json_object"},
             temperature=0,
+            **extra,
         )
         return response.choices[0].message.content or ""
 
@@ -100,6 +109,24 @@ _PROVIDERS = {
 }
 
 _provider_instance: Optional[BaseProvider] = None
+
+
+def provider_chain() -> List[str]:
+    """按优先级返回 provider 名称。前面的失败会自动回退到下一个。
+
+    默认：腾讯云 Token Plan（HY_API_KEY）优先，其次 Gemini（GEMINI_API_KEY）；
+    可用 LLM_PROVIDERS=openai_compatible,gemini 显式指定顺序。
+    """
+    configured = getattr(settings, "LLM_PROVIDERS", "")
+    if configured:
+        return [name.strip() for name in configured.split(",") if name.strip()]
+
+    chain = []
+    if getattr(settings, "LLM_API_KEY", ""):
+        chain.append(OpenAICompatibleProvider.name)
+    if getattr(settings, "GEMINI_API_KEY", ""):
+        chain.append(GeminiProvider.name)
+    return chain or [getattr(settings, "LLM_PROVIDER", GeminiProvider.name)]
 
 
 def get_provider() -> BaseProvider:
@@ -116,14 +143,19 @@ def get_provider() -> BaseProvider:
     return _provider_instance
 
 
-def complete(prompt: str) -> str:
-    """调用当前 provider。失败抛 ProviderError。"""
-    try:
-        return get_provider().complete(prompt)
-    except ProviderError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise ProviderError(str(exc)) from exc
+def complete(prompt: str, json_mode: bool = True) -> str:
+    """依次尝试 provider_chain()，全部失败才抛 ProviderError。"""
+    errors = []
+    for name in provider_chain():
+        if name not in _PROVIDERS:
+            errors.append(f"{name}: 未知 provider")
+            continue
+        try:
+            return _PROVIDERS[name]().complete(prompt, json_mode=json_mode)
+        except Exception as exc:  # noqa: BLE001 - 换下一个 provider
+            logger.warning("provider %s 调用失败，尝试下一个: %s", name, str(exc)[:200])
+            errors.append(f"{name}: {exc}")
+    raise ProviderError("; ".join(errors) or "没有可用 provider")
 
 
 def reset_provider() -> None:
