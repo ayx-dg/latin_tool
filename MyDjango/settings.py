@@ -187,7 +187,9 @@ GLOSS_TIMEOUT = float(os.getenv('GLOSS_TIMEOUT', '60'))
 GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
 
 # Cloudflare Turnstile 人机验证，可关闭（本地开发或不想打断阅读体验时）
+# 注意：sitekey 绑定域名，换部署域名后要在 Cloudflare 后台把新域名加进 Allowed domains
 TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '0x4AAAAAADFFjr5kIkGQ6Hit')
 
 # Render / 反向代理在前面终止 TLS，需要信任 X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

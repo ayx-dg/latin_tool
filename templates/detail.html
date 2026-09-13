@@ -146,7 +146,9 @@
 <body>
 
 
+    {% if turnstile_enabled %}
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    {% endif %}
 
     <div class="controls">
         <button id="init-gloss-btn">加载原文分析</button>
@@ -167,21 +169,33 @@
         let isRendered = false;
         let activeElement = null;
 
+        const TURNSTILE_ENABLED = {{ turnstile_enabled|yesno:"true,false" }};
+
         document.getElementById('init-gloss-btn').addEventListener('click', async function() {
 
+// 关闭验证时直接请求，否则走 Turnstile
+    if (!TURNSTILE_ENABLED) {
+        getGlossApi(null);
+        return;
+    }
+
+    if (typeof turnstile === 'undefined') {
+        alert('验证脚本加载失败，请检查网络后重试。');
+        return;
+    }
 
 // 手动渲染 Turnstile
     turnstile.render('#captcha-container', {
-        sitekey: '0x4AAAAAADFFjr5kIkGQ6Hit',
+        sitekey: '{{ turnstile_sitekey }}',
         callback: function(token) {
-            console.log("验证成功，Token:", token);
             const container = document.getElementById('captcha-container');
             container.style.display = 'none';
             getGlossApi(token)
-            // 这里可以处理验证成功后的逻辑，比如启用提交按钮或发送请求
         },
         'error-callback': function() {
-            console.error("验证初始化失败");
+            const btn = document.getElementById('init-gloss-btn');
+            if (btn.textContent === '分析中...') btn.textContent = '加载失败，点击重试';
+            btn.disabled = false;
         },
         theme: 'auto', // 可选：light, dark, auto
     });

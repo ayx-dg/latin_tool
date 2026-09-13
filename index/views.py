@@ -195,6 +195,8 @@ def work_detail(request, work_id, path):
         'next_path': next_path,
         'current_path': path,
         'work_id': work_id,
+        'turnstile_enabled': getattr(settings, 'TURNSTILE_ENABLED', True),
+        'turnstile_sitekey': getattr(settings, 'TURNSTILE_SITE_KEY', ''),
     })
 
 
