@@ -164,10 +164,14 @@ def complete(prompt: str, json_mode: bool = True) -> str:
 
 def get_last_provider() -> str:
     """返回最近一次 complete() 成功的 provider 名称。"""
-    return _last_provider or getattr(settings, "LLM_PROVIDER", "")
+    global _last_provider
+    p = _last_provider
+    _last_provider = None  # 读完即清，避免下次误报
+    return p or getattr(settings, "LLM_PROVIDER", "")
 
 
 def reset_provider() -> None:
     """切换环境变量后需要重置（测试用）。"""
-    global _provider_instance
+    global _provider_instance, _last_provider
     _provider_instance = None
+    _last_provider = None
