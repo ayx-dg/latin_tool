@@ -8,6 +8,7 @@ import google.generativeai as genai
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.db import models
 from django.db.models import Min
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -312,8 +313,26 @@ def get_or_create_gloss(full_text):
 # --- Page Views ---
 
 def work_list(request):
-    works = Works.objects.all()
-    return render(request, 'list.html', {'works': works})
+    works = Works.objects.all().order_by('author', 'title')
+    q = request.GET.get('q', '').strip()
+    if q:
+        works = works.filter(
+            models.Q(author__icontains=q) | models.Q(title__icontains=q)
+        )
+    # 按作者分组
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for w in works:
+        author = (w.author or 'Unknown').strip()
+        grouped.setdefault(author, []).append(w)
+    # 首字母索引
+    letters = sorted(set(a[0].upper() for a in grouped if a[0]))
+    return render(request, 'list.html', {
+        'grouped': grouped,
+        'letters': letters,
+        'query': q,
+        'total': Works.objects.count(),
+    })
 
 
 def work_detail(request, work_id, path):

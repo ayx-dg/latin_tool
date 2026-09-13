@@ -2,26 +2,266 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>{{ work.author }}: {{ work.title }}</title>
     <style>
         :root {
-            --popover-bg: #2c3e50;
-            --popover-text: #ffffff;
+            --bg: #fdfdfd;
+            --text: #333;
+            --muted: #888;
             --accent-m: #ff9f43;
-            --accent-g: #bdc3c7;
+            --accent-g: #95a5a6;
+            --popover-bg: #2c3e50;
+            --popover-text: #fff;
+            --card-bg: #fafafa;
+            --border: #e8e4df;
+            --font-size: 1.15rem;
         }
+        [data-theme="sepia"] {
+            --bg: #f4ecd8;
+            --text: #5b4636;
+            --muted: #8a7660;
+            --card-bg: #efe5d0;
+            --border: #d4c4a8;
+            --popover-bg: #5b4636;
+        }
+        [data-theme="dark"] {
+            --bg: #1a1a2e;
+            --text: #d4d4d4;
+            --muted: #888;
+            --accent-m: #f0a500;
+            --accent-g: #7f8c8d;
+            --popover-bg: #16213e;
+            --popover-text: #eee;
+            --card-bg: #16213e;
+            --border: #2a2a4a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
             line-height: 1.8;
-            padding: 40px 20px;
-            background-color: #fdfdfd;
+            padding: 20px;
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.3s, color 0.3s;
         }
 
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .toolbar .group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+        }
+        .toolbar button {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--text);
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toolbar button:hover { background: var(--border); }
+        .toolbar button.active { background: var(--accent-m); color: white; }
+        .toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+        .toolbar .size-label {
+            font-size: 0.75rem;
+            color: var(--muted);
+            min-width: 32px;
+            text-align: center;
+        }
+
+        /* Main content */
+        #latin-content {
+            max-width: 720px;
+            margin: 0 auto;
+            font-size: var(--font-size);
+            text-align: justify;
+        }
+
+        /* Word wrapper */
+        .word-wrapper {
+            position: relative;
+            display: inline;
+            cursor: pointer;
+            border-bottom: 1px solid transparent;
+            transition: background 0.15s;
+        }
+        .word-wrapper:hover { border-bottom-color: var(--border); }
+        .word-wrapper.active {
+            display: inline-block;
+            background: rgba(255,159,67,0.15);
+            border-bottom: 1px solid var(--accent-m);
+        }
+
+        /* Popover */
+        .gloss-popover {
+            display: none;
+            position: absolute;
+            bottom: 140%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: max-content;
+            min-width: 80px;
+            max-width: 80vw;
+            white-space: normal;
+            background: var(--popover-bg);
+            color: var(--popover-text);
+            padding: 8px 12px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            line-height: 1.4;
+            font-size: 0.85rem;
+        }
+        .word-wrapper.active .gloss-popover {
+            display: inline-block;
+            animation: fadeIn 0.12s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, 4px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        .m-text { color: var(--accent-m); font-weight: bold; margin-right: 6px; }
+        .g-text { color: var(--accent-g); font-size: 0.8rem; }
+
+        /* Controls area */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-family: inherit;
+            transition: background 0.2s, opacity 0.2s;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2c3e50; color: white; }
+        .btn-primary:hover:not(:disabled) { background: #34495e; }
+        .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .btn-outline:hover:not(:disabled) { background: var(--card-bg); }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Status */
+        .gloss-status {
+            min-height: 1.2em;
+            font-size: 0.85rem;
+            color: var(--muted);
+            text-align: center;
+            max-width: 640px;
+        }
+        .gloss-status.error { color: #b00020; }
+        .gloss-status.warn { color: #a15c00; }
+        .gloss-status.ok { color: #0a7a3d; }
+
+        /* Explain panel */
+        .explain-panel {
+            margin-top: 10px;
+            padding: 14px 16px;
+            max-width: 720px;
+            text-align: left;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            line-height: 1.7;
+            font-size: 0.92rem;
+            white-space: pre-wrap;
+        }
+        .explain-panel h1, .explain-panel h2, .explain-panel h3 {
+            margin: 14px 0 6px;
+            color: var(--text);
+        }
+        .explain-panel h1 { font-size: 1.05rem; }
+        .explain-panel h2 { font-size: 1rem; }
+        .explain-panel h3 { font-size: 0.95rem; }
+        .explain-panel ul, .explain-panel ol { padding-left: 20px; margin: 6px 0; }
+        .explain-panel li { margin: 3px 0; }
+        .explain-panel code {
+            background: var(--border);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .explain-panel hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-top: 20px;
+            border-top: 1px solid var(--border);
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .pagination a {
+            color: var(--text);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            font-size: 0.85rem;
+            transition: background 0.15s;
+        }
+        .pagination a:hover { background: var(--card-bg); }
+        .pagination .page-info { font-size: 0.8rem; color: var(--muted); }
+
+        /* Back to list */
+        .back-link {
+            display: inline-block;
+            margin-bottom: 12px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.15s;
+        }
+        .back-link:hover { color: var(--text); }
+
+        /* Mobile */
         @media (max-width: 600px) {
+            body { padding: 12px; }
+            #latin-content { font-size: calc(var(--font-size) * 0.92); }
             .word-wrapper.active .gloss-popover {
-                display: block;
                 position: fixed;
                 bottom: 70px;
                 left: 10px;
@@ -31,172 +271,8 @@
                 transform: none;
                 border-radius: 12px;
             }
-            .gloss-popover::after {
-                display: none;
-            }
-            #latin-content { font-size: 1.15rem; }
-            .controls { padding: 0 10px; }
+            .gloss-popover::after { display: none; }
         }
-
-        #latin-content {
-            max-width: 800px;
-            margin: 0 auto;
-            font-size: 1.4rem;
-            color: #333;
-            text-align: justify;
-        }
-
-        .word-wrapper {
-            position: relative;
-            display: inline;
-            cursor: pointer;
-            transition: background 0.2s;
-            border-bottom: 1px solid transparent;
-        }
-        .word-wrapper:hover {
-            border-bottom: 1px dashed #ccc;
-        }
-
-        .gloss-popover {
-            display: none;
-            position: absolute;
-            bottom: 140%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: max-content;
-            min-width: 100px;
-            max-width: 80vw;
-            white-space: normal;
-            word-break: normal;
-            background: var(--popover-bg);
-            color: var(--popover-text);
-            padding: 10px;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 1000;
-            line-height: 1.5;
-        }
-
-        .word-wrapper.active {
-            display: inline-block;
-            background-color: rgba(255, 159, 67, 0.15);
-            border-bottom: 1px solid var(--accent-m);
-        }
-        .word-wrapper.active .gloss-popover {
-            display: inline-block;
-            animation: fadeIn 0.15s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, 5px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
-        }
-
-        .m-text { color: var(--accent-m); font-weight: bold; margin-right: 8px; }
-        .g-text { color: var(--accent-g); font-size: 0.85rem; }
-
-        .controls {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        #turnstile-container { max-width: 100%; }
-
-        .gloss-status {
-            min-height: 1.2em;
-            font-size: 0.9rem;
-            color: #666;
-            text-align: center;
-            max-width: 640px;
-        }
-        .gloss-status.error { color: #b00020; }
-        .gloss-status.warn  { color: #a15c00; }
-        .gloss-status.ok    { color: #0a7a3d; }
-
-        /* buttons */
-        .btn {
-            padding: 8px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.95rem;
-            transition: background 0.2s, opacity 0.2s;
-        }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background: #2c3e50; color: white; }
-        .btn-primary:hover:not(:disabled) { background: #34495e; }
-        .btn-secondary { background: #ecf0f1; color: #2c3e50; border: 1px solid #bdc3c7; }
-        .btn-secondary:hover:not(:disabled) { background: #bdc3c7; }
-
-        /* spinner */
-        .spinner {
-            display: inline-block;
-            width: 14px; height: 14px;
-            border: 2px solid rgba(0,0,0,0.15);
-            border-top-color: #2c3e50;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
-            vertical-align: middle;
-            margin-right: 6px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* explain panel */
-        .explain-panel {
-            margin-top: 10px;
-            padding: 14px 16px;
-            max-width: 720px;
-            text-align: left;
-            background: #fafafa;
-            border: 1px solid #e3e3e3;
-            border-radius: 6px;
-            line-height: 1.7;
-            font-size: 0.95rem;
-            white-space: pre-wrap;
-        }
-        .explain-panel h1, .explain-panel h2, .explain-panel h3 {
-            margin: 16px 0 8px;
-            color: #2c3e50;
-        }
-        .explain-panel h1 { font-size: 1.1rem; }
-        .explain-panel h2 { font-size: 1.05rem; }
-        .explain-panel h3 { font-size: 1rem; }
-        .explain-panel ul, .explain-panel ol { padding-left: 20px; margin: 8px 0; }
-        .explain-panel li { margin: 4px 0; }
-        .explain-panel code {
-            background: #f0f0f0;
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-family: "Palatino Linotype", serif;
-        }
-        .explain-panel em { color: #666; }
-
-        .loading-hint {
-            font-size: 0.85rem;
-            color: #888;
-            text-align: center;
-            margin-top: 4px;
-        }
-
-        pagination {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 60px;
-            background: var(--popover-bg);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 30px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-            border-top: 1px solid #eee;
-            z-index: 2000;
-        }
-        pagination a { color: white; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -205,11 +281,27 @@
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     {% endif %}
 
+    <a class="back-link" href="/">&#8592; Back to Library</a>
+
+    <div class="toolbar">
+        <div class="group" id="size-group">
+            <button id="font-down" title="Smaller">&#8722;</button>
+            <span class="size-label" id="size-label">A</span>
+            <button id="font-up" title="Larger">+</button>
+        </div>
+        <div class="sep"></div>
+        <div class="group" id="theme-group">
+            <button data-theme="light" title="Light" class="active">&#9788;</button>
+            <button data-theme="sepia" title="Sepia">&#9752;</button>
+            <button data-theme="dark" title="Dark">&#9790;</button>
+        </div>
+    </div>
+
     <div class="controls">
-        <button id="init-gloss-btn" class="btn btn-primary">加载逐词标注</button>
+        <button id="init-gloss-btn" class="btn btn-primary">Load Gloss</button>
         <div id="captcha-container" data-sitekey=""></div>
         <div id="gloss-status" class="gloss-status"></div>
-        <button id="explain-btn" class="btn btn-secondary">AI 讲解整章</button>
+        <button id="explain-btn" class="btn btn-outline">AI Explain Chapter</button>
         <div id="explain-panel" class="explain-panel" hidden></div>
     </div>
 
@@ -217,30 +309,73 @@
              data-workid="{{ work.id }}"
              data-path="{{ current_path }}">{{full_text}}</article>
 
-<nav class="pagination">
-    {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">&#x2190; 上一页</a>{% endif %}
-    <span>第 {{ current_path }} 页</span>
-    {% if next_path %}<a href="/work/{{work.id}}/{{ next_path }}">下一页 &#x2192;</a>{% endif %}
-</nav>
+    <div class="pagination">
+        {% if prev_path %}<a href="/work/{{work.id}}/{{ prev_path }}">&#8592; Prev</a>{% else %}<span></span>{% endif %}
+        <span class="page-info">Ch. {{ current_path|truncatechars:40 }}</span>
+        {% if next_path %}<a href="/work/{{work.id}}/{{ next_path }}">Next &#8594;</a>{% else %}<span></span>{% endif %}
+    </div>
 
 <script>
+/* ---- State ---- */
 let isRendered = false;
 let activeElement = null;
 const TURNSTILE_ENABLED = {{ turnstile_enabled|yesno:"true,false" }};
 let turnstileWidgetId = null;
 
+/* ---- Preferences (localStorage) ---- */
+const PREFS_KEY = 'latin-reader-prefs';
+function loadPrefs() {
+    try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
+}
+function savePrefs(p) { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); }
+function applyPrefs() {
+    const p = loadPrefs();
+    // font size
+    const sz = p.fontSize || 1.15;
+    document.documentElement.style.setProperty('--font-size', sz + 'rem');
+    document.getElementById('size-label').textContent = sz.toFixed(1);
+    // theme
+    const th = p.theme || 'light';
+    document.documentElement.setAttribute('data-theme', th);
+    document.querySelectorAll('#theme-group button').forEach(b => {
+        b.classList.toggle('active', b.dataset.theme === th);
+    });
+}
+applyPrefs();
+
+/* ---- Font size ---- */
+document.getElementById('font-up').addEventListener('click', () => {
+    const p = loadPrefs();
+    p.fontSize = Math.min(2.0, (p.fontSize || 1.15) + 0.05);
+    savePrefs(p); applyPrefs();
+});
+document.getElementById('font-down').addEventListener('click', () => {
+    const p = loadPrefs();
+    p.fontSize = Math.max(0.8, (p.fontSize || 1.15) - 0.05);
+    savePrefs(p); applyPrefs();
+});
+
+/* ---- Theme ---- */
+document.querySelectorAll('#theme-group button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const p = loadPrefs();
+        p.theme = btn.dataset.theme;
+        savePrefs(p); applyPrefs();
+    });
+});
+
+/* ---- Turnstile ---- */
 function resetTurnstile() {
     if (turnstileWidgetId !== null && window.turnstile) {
         try { turnstile.reset(turnstileWidgetId); } catch (e) {}
     }
 }
-
 function showError(msg) {
     const box = document.getElementById('gloss-status');
     box.textContent = msg;
     box.className = 'gloss-status error';
     const btn = document.getElementById('init-gloss-btn');
-    btn.innerHTML = '重新加载标注';
+    btn.innerHTML = 'Retry Gloss';
     btn.disabled = false;
 }
 function showStatus(msg, kind) {
@@ -260,14 +395,14 @@ function setBtnDone(btn, text) {
 /* ---- Gloss ---- */
 document.getElementById('init-gloss-btn').addEventListener('click', async function() {
     if (!TURNSTILE_ENABLED) { getGlossApi(null); return; }
-    if (typeof turnstile === 'undefined') { showError('验证脚本加载失败，请检查网络后重试。'); return; }
+    if (typeof turnstile === 'undefined') { showError('Verification script failed to load.'); return; }
     if (turnstileWidgetId === null) {
         turnstileWidgetId = turnstile.render('#captcha-container', {
             sitekey: '{{ turnstile_sitekey }}',
             action: 'gloss',
             callback: function(token) { getGlossApi(token); },
-            'error-callback': function() { showError('人机验证失败，请重试。'); resetTurnstile(); },
-            'expired-callback': function() { showError('验证已过期，请重新点击按钮。'); resetTurnstile(); },
+            'error-callback': function() { showError('Verification failed.'); resetTurnstile(); },
+            'expired-callback': function() { showError('Verification expired.'); resetTurnstile(); },
             theme: 'auto',
         });
     } else {
@@ -279,8 +414,8 @@ async function getGlossApi(token) {
     const container = document.getElementById('latin-content');
     const btn = document.getElementById('init-gloss-btn');
     if (isRendered) return;
-    setBtnLoading(btn, '正在查词典...');
-    showStatus('正在查询公开词典，章节越长越久…');
+    setBtnLoading(btn, 'Looking up dictionary...');
+    showStatus('Querying public dictionary...');
     try {
         const params = new URLSearchParams({
             work_id: container.dataset.workid,
@@ -291,9 +426,9 @@ async function getGlossApi(token) {
         if (!response.ok) {
             if (response.status === 429) {
                 const r = response.headers.get('Retry-After');
-                throw new Error(r ? `请求过于频繁，请 ${r} 秒后重试。` : '请求过于频繁，请稍后再试。');
+                throw new Error(r ? `Too many requests. Try in ${r}s.` : 'Too many requests.');
             }
-            let msg = `服务返回 ${response.status}`;
+            let msg = `Server error ${response.status}`;
             try { const d = await response.json(); msg = d.error || msg; } catch (_) {}
             throw new Error(msg);
         }
@@ -303,17 +438,17 @@ async function getGlossApi(token) {
             isRendered = true;
             btn.style.display = 'none';
             if (data.missing > 0) {
-                showStatus(`已标注 ${data.total - data.missing}/${data.total} 个词，${data.missing} 个未收录（可稍后重试）`, 'warn');
+                showStatus(`Glossed ${data.total - data.missing}/${data.total} words, ${data.missing} not found`, 'warn');
             } else {
-                showStatus(`标注完成，共 ${data.total} 个词（${data.cached ? '缓存' : '词典首次查询已缓存'}），点击任意单词查看释义`, 'ok');
+                showStatus(`Done: ${data.total} words (${data.cached ? 'cached' : 'dictionary lookup cached'}), click any word`, 'ok');
             }
         }
     } catch (e) {
         console.error(e);
-        showError(e.message || '加载失败，请重试。');
+        showError(e.message || 'Failed to load.');
     } finally {
         resetTurnstile();
-        setBtnDone(btn, '重新加载标注');
+        setBtnDone(btn, 'Retry Gloss');
     }
 }
 
@@ -322,9 +457,9 @@ document.getElementById('explain-btn').addEventListener('click', async function(
     const btn = this;
     const panel = document.getElementById('explain-panel');
     const container = document.getElementById('latin-content');
-    setBtnLoading(btn, '生成中...');
+    setBtnLoading(btn, 'Generating...');
     panel.hidden = false;
-    panel.innerHTML = '<em>正在生成整章讲解，首次需要调用模型，之后永久缓存…</em>';
+    panel.innerHTML = '<em>Generating chapter explanation (first time calls model, then cached forever)...</em>';
     try {
         const params = new URLSearchParams({
             work_id: container.dataset.workid,
@@ -332,36 +467,30 @@ document.getElementById('explain-btn').addEventListener('click', async function(
         });
         const response = await fetch(`/api/explain?${params.toString()}`);
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || `服务返回 ${response.status}`);
+        if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
         panel.innerHTML = renderMarkdown(data.note);
-        btn.textContent = data.cached ? 'AI 讲解（已缓存）' : 'AI 讲解整章';
+        btn.textContent = data.cached ? 'AI Explain (cached)' : 'AI Explain Chapter';
     } catch (e) {
-        panel.innerHTML = `<em style="color:#b00020">讲解失败：${escapeHtml(e.message)}</em>`;
-        btn.textContent = '重试 AI 讲解';
+        panel.innerHTML = `<em style="color:#b00020">Failed: ${escapeHtml(e.message)}</em>`;
+        btn.textContent = 'Retry AI Explain';
     } finally {
         btn.disabled = false;
     }
 });
 
-/* ---- Markdown (light) ---- */
+/* ---- Markdown ---- */
 function renderMarkdown(text) {
     if (!text) return '';
     let html = escapeHtml(text);
-    // headings
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    // bold / italic
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    // inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // lists
     html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
     html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-    // horizontal rule
     html = html.replace(/^---+$/gm, '<hr>');
-    // newlines → <br> (outside pre/code)
     html = html.replace(/\n/g, '<br>');
     return html;
 }
@@ -388,7 +517,7 @@ function renderPopover(container, glossArray) {
                 const meaning = item.m || '';
                 const grammar = item.g || '';
                 span.innerHTML = token + '<div class="gloss-popover">'
-                    + (meaning ? '<span class="m-text">' + escapeHtml(meaning) + '</span>' : '<span class="m-text" style="opacity:0.4">—</span>')
+                    + (meaning ? '<span class="m-text">' + escapeHtml(meaning) + '</span>' : '<span class="m-text" style="opacity:0.3">--</span>')
                     + (grammar ? ' <span class="g-text">' + escapeHtml(grammar) + '</span>' : '')
                     + '</div>';
                 span.onclick = (e) => {
@@ -412,6 +541,7 @@ function renderPopover(container, glossArray) {
     });
 }
 
+/* ---- Global click to close popover ---- */
 document.addEventListener('click', () => {
     if (activeElement) {
         activeElement.classList.remove('active');

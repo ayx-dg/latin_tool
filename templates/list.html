@@ -1,8 +1,270 @@
-<h1>Latin Works</h1>
-<ul>
-    {% for w in works %}
-<li>
-<a href="{% url 'work_redirect' w.id %}">{{ w.author }}: {{ w.title }}</a> 
-</li>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latin Library</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+            background: #f8f6f3;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 32px 20px 28px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+        .header .subtitle {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-bottom: 16px;
+        }
+
+        /* Search */
+        .search-box {
+            max-width: 480px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 10px 16px 10px 38px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-family: inherit;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            outline: none;
+            transition: background 0.2s;
+        }
+        .search-box input::placeholder { color: rgba(255,255,255,0.5); }
+        .search-box input:focus { background: rgba(255,255,255,0.25); }
+        .search-box .icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0.5;
+            font-size: 0.9rem;
+        }
+
+        /* Letter nav */
+        .letter-nav {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 12px 20px;
+            background: white;
+            border-bottom: 1px solid #e8e4df;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .letter-nav a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #555;
+            font-size: 0.85rem;
+            transition: background 0.15s;
+        }
+        .letter-nav a:hover { background: #f0ece8; }
+        .letter-nav a.active { background: #2c3e50; color: white; }
+
+        /* Stats */
+        .stats {
+            text-align: center;
+            padding: 10px;
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        /* Content */
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 0 20px 80px;
+        }
+
+        /* Author section */
+        .author-section {
+            margin-top: 28px;
+        }
+        .author-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #999;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e8e4df;
+            margin-bottom: 6px;
+            scroll-margin-top: 60px;
+        }
+
+        /* Work card */
+        .work-card {
+            display: block;
+            padding: 10px 14px;
+            margin: 3px 0;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #333;
+            transition: background 0.15s;
+        }
+        .work-card:hover { background: #f0ece8; }
+        .work-card .title {
+            font-size: 1.05rem;
+            color: #2c3e50;
+        }
+        .work-card .author-small {
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        /* No results */
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .no-results .emoji { font-size: 2rem; margin-bottom: 8px; }
+
+        /* Back to top */
+        .back-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 200;
+        }
+        .back-top.show { display: flex; }
+
+        @media (max-width: 600px) {
+            .header h1 { font-size: 1.4rem; }
+            .container { padding: 0 14px 80px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Latin Library</h1>
+    <div class="subtitle">{{ total }} works — gloss &amp; explain with AI</div>
+    <div class="search-box">
+        <span class="icon">&#128269;</span>
+        <input type="text" id="search" placeholder="Search by author or title..." autofocus
+               value="{{ query }}">
+    </div>
+</div>
+
+<div class="letter-nav" id="letter-nav">
+    {% for L in letters %}
+    <a href="#letter-{{ L }}" data-letter="{{ L }}">{{ L }}</a>
     {% endfor %}
-</ul>
+</div>
+
+<div class="stats" id="stats"></div>
+
+<div class="container" id="works-list">
+    {% for author, works in grouped.items %}
+    <div class="author-section" data-letter="{{ author.0|upper }}">
+        <div class="author-label" id="letter-{{ author.0|upper }}">{{ author }}</div>
+        {% for w in works %}
+        <a class="work-card" href="{% url 'work_redirect' w.id %}"
+           data-search="{{ author|lower }} {{ w.title|lower }}">
+            <div class="title">{{ w.title }}</div>
+            {% ifchanged %}{% endchanged %}
+        </a>
+        {% endfor %}
+    </div>
+    {% empty %}
+    <div class="no-results">
+        <div class="emoji">&#128214;</div>
+        <div>No works found{% if query %} for "{{ query }}"{% endif %}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<button class="back-top" id="back-top" title="Back to top">&#8593;</button>
+
+<script>
+const searchInput = document.getElementById('search');
+const sections = document.querySelectorAll('.author-section');
+const cards = document.querySelectorAll('.work-card');
+const stats = document.getElementById('stats');
+const backTop = document.getElementById('back-top');
+
+function doFilter() {
+    const q = searchInput.value.toLowerCase().trim();
+    let shown = 0;
+    sections.forEach(sec => {
+        const author = sec.dataset.letter;
+        let sectionVisible = 0;
+        sec.querySelectorAll('.work-card').forEach(card => {
+            const match = !q || card.dataset.search.includes(q);
+            card.style.display = match ? '' : 'none';
+            if (match) sectionVisible++;
+        });
+        sec.style.display = sectionVisible ? '' : 'none';
+        shown += sectionVisible;
+    });
+    stats.textContent = q ? `${shown} result${shown !== 1 ? 's' : ''}` : '';
+}
+
+searchInput.addEventListener('input', doFilter);
+
+// restore search from URL
+if (new URLSearchParams(location.search).has('q')) {
+    doFilter();
+}
+
+// back to top
+window.addEventListener('scroll', () => {
+    backTop.classList.toggle('show', window.scrollY > 400);
+});
+backTop.addEventListener('click', () => window.scrollTo({top: 0, behavior: 'smooth'}));
+
+// letter nav active state
+const letterLinks = document.querySelectorAll('.letter-nav a');
+const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            letterLinks.forEach(l => l.classList.remove('active'));
+            const link = document.querySelector(`.letter-nav a[data-letter="${e.target.id.replace('letter-','')}"]`);
+            if (link) link.classList.add('active');
+        }
+    });
+}, {rootMargin: '-60px 0px -80% 0px'});
+sections.forEach(sec => observer.observe(sec.querySelector('.author-label')));
+</script>
+</body>
+</html>
