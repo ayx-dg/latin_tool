@@ -164,10 +164,7 @@ def complete(prompt: str, json_mode: bool = True) -> str:
 
 def get_last_provider() -> str:
     """返回最近一次 complete() 成功的 provider 名称。"""
-    global _last_provider
-    p = _last_provider
-    _last_provider = None  # 读完即清，避免下次误报
-    return p or getattr(settings, "LLM_PROVIDER", "")
+    return _last_provider or getattr(settings, "LLM_PROVIDER", "")
 
 
 def reset_provider() -> None:
