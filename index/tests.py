@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from django.test import override_settings
 from unittest.mock import MagicMock, patch
 
 import django
@@ -161,6 +162,69 @@ class TestGetOrCreateGloss:
             gloss_data, _ = get_or_create_gloss("alpha")
         assert gloss_data[0]["m"] == "第一"
         assert GlossCache.objects.count() == 1
+
+
+class TestVerifyCaptcha:
+    """后端必须校验 success + action + hostname，缺一项都可能被跨站/跨动作重放。"""
+
+    def _call(self, token, payload, ok=True, exc=None, hostnames="latin-library.onrender.com"):
+        import index.views as views
+
+        fake_response = MagicMock()
+        fake_response.ok = ok
+        fake_response.json.return_value = payload
+        with override_settings(
+            TURNSTILE_SECRET="secret", TURNSTILE_HOSTNAMES=hostnames
+        ), patch.object(views.requests, "post", side_effect=exc, return_value=fake_response) as post:
+            result = views.verify_captcha(token)
+            kwargs = post.call_args.kwargs if post.called else {}
+        return result, kwargs
+
+    def test_accepts_valid_token(self):
+        (ok, reason), _ = self._call("t" * 20, {"success": True, "action": "gloss", "hostname": "latin-library.onrender.com"})
+        assert (ok, reason) == (True, None)
+
+    def test_rejects_missing_and_oversized_token(self):
+        assert self._call("", {})[0] == (False, "invalid-token")
+        assert self._call("x" * 2049, {})[0] == (False, "invalid-token")
+
+    def test_rejects_siteverify_failure(self):
+        (ok, reason), _ = self._call("t", {"success": False, "error-codes": ["timeout-or-duplicate"]})
+        assert ok is False and reason == "timeout-or-duplicate"
+
+    def test_rejects_action_mismatch(self):
+        (ok, reason), _ = self._call("t", {"success": True, "action": "login", "hostname": "latin-library.onrender.com"})
+        assert ok is False and reason == "action-mismatch"
+
+    def test_rejects_hostname_mismatch(self):
+        (ok, reason), _ = self._call("t", {"success": True, "action": "gloss", "hostname": "evil.example.com"})
+        assert ok is False and reason == "hostname-mismatch"
+
+    def test_rejects_on_timeout(self):
+        (ok, reason), _ = self._call("t", {}, exc=RuntimeError("timeout"))
+        assert ok is False and reason == "siteverify-error"
+
+    def test_sends_secret_response_and_remoteip(self):
+        from django.test import RequestFactory
+
+        import index.views as views
+
+        fake_response = MagicMock()
+        fake_response.ok = True
+        fake_response.json.return_value = {"success": True, "action": "gloss", "hostname": "latin-library.onrender.com"}
+        request = RequestFactory().get("/api/gloss", HTTP_X_FORWARDED_FOR="1.2.3.4, 10.0.0.1")
+        with override_settings(TURNSTILE_SECRET="s3cret", TURNSTILE_HOSTNAMES="latin-library.onrender.com"), \
+             patch.object(views.requests, "post", return_value=fake_response) as post:
+            views.verify_captcha("tok", request=request)
+        data = post.call_args.kwargs["data"]
+        assert data["secret"] == "s3cret"
+        assert data["response"] == "tok"
+        assert data["remoteip"] == "1.2.3.4"
+        assert post.call_args.kwargs["timeout"] == 10
+
+    def test_rejects_when_hostnames_not_configured(self):
+        (ok, reason), _ = self._call("t", {"success": True}, hostnames="")
+        assert ok is False and reason == "server-misconfigured"
 
 
 class TestCheckRateLimit:

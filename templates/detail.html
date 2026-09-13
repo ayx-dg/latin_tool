@@ -118,6 +118,17 @@
     /* 确保验证码不超出移动端屏幕 */
     max-width: 100%;
 }
+
+.gloss-status {
+    min-height: 1.2em;
+    font-size: 0.9rem;
+    color: #666;
+    text-align: center;
+    max-width: 640px;
+}
+.gloss-status.error { color: #b00020; }
+.gloss-status.warn  { color: #a15c00; }
+.gloss-status.ok    { color: #0a7a3d; }
         #init-gloss-btn {
             padding: 10px 24px;
             background: #2c3e50;
@@ -153,6 +164,7 @@
     <div class="controls">
         <button id="init-gloss-btn">加载原文分析</button>
         <div id="captcha-container" data-sitekey=""></div>
+        <div id="gloss-status" class="gloss-status"></div>
     </div>
 
     <article id="latin-content" 
@@ -171,6 +183,14 @@
 
         const TURNSTILE_ENABLED = {{ turnstile_enabled|yesno:"true,false" }};
 
+        let turnstileWidgetId = null;   // 保留 widget id，token 单次有效，重试前必须 reset
+
+        function resetTurnstile() {
+            if (turnstileWidgetId !== null && window.turnstile) {
+                try { turnstile.reset(turnstileWidgetId); } catch (e) { /* 已销毁 */ }
+            }
+        }
+
         document.getElementById('init-gloss-btn').addEventListener('click', async function() {
 
 // 关闭验证时直接请求，否则走 Turnstile
@@ -180,77 +200,103 @@
     }
 
     if (typeof turnstile === 'undefined') {
-        alert('验证脚本加载失败，请检查网络后重试。');
+        showError('验证脚本加载失败，请检查网络后重试。');
         return;
     }
 
-// 手动渲染 Turnstile
-    turnstile.render('#captcha-container', {
-        sitekey: '{{ turnstile_sitekey }}',
-        callback: function(token) {
-            const container = document.getElementById('captcha-container');
-            container.style.display = 'none';
-            getGlossApi(token)
-        },
-        'error-callback': function() {
-            const btn = document.getElementById('init-gloss-btn');
-            if (btn.textContent === '分析中...') btn.textContent = '加载失败，点击重试';
-            btn.disabled = false;
-        },
-        theme: 'auto', // 可选：light, dark, auto
-    });
+// 手动渲染 Turnstile（action 必须和后端校验的一致）
+    if (turnstileWidgetId === null) {
+        turnstileWidgetId = turnstile.render('#captcha-container', {
+            sitekey: '{{ turnstile_sitekey }}',
+            action: 'gloss',
+            callback: function(token) {
+                getGlossApi(token);
+            },
+            'error-callback': function() {
+                showError('人机验证失败，请重试。');
+                resetTurnstile();
+            },
+            'expired-callback': function() {
+                showError('验证已过期，请重新点击按钮。');
+                resetTurnstile();
+            },
+            theme: 'auto',
+        });
+    } else {
+        resetTurnstile();
+    }
 
         });
 
+
+        function showError(message) {
+            const box = document.getElementById('gloss-status');
+            if (box) {
+                box.textContent = message;
+                box.className = 'gloss-status error';
+            }
+            const btn = document.getElementById('init-gloss-btn');
+            btn.textContent = '重新加载标注';
+            btn.disabled = false;
+        }
+
+        function showStatus(message, kind) {
+            const box = document.getElementById('gloss-status');
+            if (box) {
+                box.textContent = message;
+                box.className = 'gloss-status ' + (kind || '');
+            }
+        }
 
         async function getGlossApi(token){
 
             const container = document.getElementById('latin-content');
             const btn = document.getElementById('init-gloss-btn');
             if (isRendered) return;
-            btn.textContent = '分析中...'; 
+            btn.disabled = true;
+            btn.textContent = '分析中...';
+            showStatus('正在分析全文，章节越长越久（首次需要调用模型，之后走缓存秒开）…');
             try {
-                const response = await fetch(`/api/gloss?work_id=${container.dataset.workid}&path=${container.dataset.path}&cf_token=${token}`);
-if (!response.ok) {
-            // 针对 429 状态码的特殊处理
-            if (response.status === 429) {
-                btn.textContent = '操作太快了，请稍后再试';
-                // 如果后端在 Header 中返回了等待时间，可以利用它
-                const retryAfter = response.headers.get('Retry-After');
-                const msg = retryAfter ? `请求过于频繁，请在 ${retryAfter} 秒后再试。` : '请求过于频繁，请稍后再试。';
-                throw new Error(msg);
+                const params = new URLSearchParams({
+                    work_id: container.dataset.workid,
+                    path: container.dataset.path,
+                });
+                if (token) params.set('cf_token', token);
+
+                const response = await fetch(`/api/gloss?${params.toString()}`);
+
+                if (!response.ok) {
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get('Retry-After');
+                        throw new Error(retryAfter ? `请求过于频繁，请在 ${retryAfter} 秒后再试。` : '请求过于频繁，请稍后再试。');
+                    }
+                    let msg = `服务返回 ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        msg = errorData.error || msg;
+                    } catch (_) { /* 非 JSON 响应 */ }
+                    throw new Error(msg);
+                }
+
+                const data = await response.json();
+
+                if (data && data.gloss) {
+                    renderPopover(container, data.gloss);
+                    isRendered = true;
+                    btn.style.display = 'none';
+                    if (data.missing > 0) {
+                        showStatus(`已完成 ${data.total - data.missing}/${data.total} 个词，${data.missing} 个未解析（结果未缓存，可稍后重试）`, 'warn');
+                    } else {
+                        showStatus(`标注完成，共 ${data.total} 个词，点击任意单词查看释义`, 'ok');
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                showError(e.message || '加载失败，请重试。');
+            } finally {
+                resetTurnstile();
             }
-
-            // 处理其他错误（如 403 验证码错误）
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
-
-        const data = await response.json();
-
-        if (data && data.gloss) {
-            renderPopover(container, data.gloss);
-            isRendered = true;
-            btn.style.display = 'none';
-            document.getElementById('turnstile-container').style.display = 'none';
-        }
-    } catch (e) {
-        console.error(e);
-        // 如果不是 429 导致的错误，恢复重试文案
-        if (btn.textContent === '分析中...') {
-            btn.textContent = '加载失败，点击重试';
-        }
-        btn.disabled = false;
-
-        // 只有 403 验证码失效或后端要求时才重置验证码
-        if (window.turnstile) {
-            turnstile.reset('#turnstile-container');
-        }
-
-        // 使用更温和的提示方式（可选）
-        alert(e.message);
-    }
-}
         function renderPopover(container, glossArray) {
             const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
             const nodes = [];

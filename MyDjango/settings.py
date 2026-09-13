@@ -190,6 +190,8 @@ GLOSS_RETRIES = int(os.getenv('GLOSS_RETRIES', '2'))
 # 注意：sitekey 绑定域名，换部署域名后要在 Cloudflare 后台把新域名加进 Allowed domains
 TURNSTILE_ENABLED = os.getenv('TURNSTILE_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 TURNSTILE_SITE_KEY = os.getenv('TURNSTILE_SITE_KEY', '0x4AAAAAADFFjr5kIkGQ6Hit')
+# siteverify 返回的 hostname 白名单。生产环境不要包含 localhost / 127.0.0.1
+TURNSTILE_HOSTNAMES = os.getenv('TURNSTILE_HOSTNAMES', 'localhost,127.0.0.1,latin-library.onrender.com')
 
 # Render / 反向代理在前面终止 TLS，需要信任 X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

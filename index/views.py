@@ -32,14 +32,67 @@ def check_rate_limit(key, limit, period):
     return True
 
 
-def verify_captcha(token):
-    secret_key = settings.TURNSTILE_SECRET
-    url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-    response = requests.post(url, data={
-        'secret': secret_key,
-        'response': token,
-    })
-    return response.json().get('success', False)
+TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+GLOSS_ACTION = "gloss"
+
+
+def _client_ip(request):
+    if request is None:
+        return None
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+def verify_captcha(token, request=None, action=GLOSS_ACTION):
+    """规范化的 Turnstile 校验。返回 (ok, reason)。
+
+    除了 success，还必须校验 action 和 hostname，否则拿到别的站点/别的动作签发的
+    token 也能通过。token 单次有效，重复提交会被 Cloudflare 拒绝（timeout-or-duplicate）。
+    """
+    secret_key = getattr(settings, "TURNSTILE_SECRET", "")
+    hostnames = {
+        h.strip()
+        for h in getattr(settings, "TURNSTILE_HOSTNAMES", "").split(",")
+        if h.strip()
+    }
+
+    if not isinstance(token, str) or not (0 < len(token) <= 2048):
+        return False, "invalid-token"
+    if not secret_key or not hostnames:
+        logger.error("TURNSTILE_SECRET 或 TURNSTILE_HOSTNAMES 未配置")
+        return False, "server-misconfigured"
+
+    try:
+        response = requests.post(
+            TURNSTILE_VERIFY_URL,
+            data={
+                "secret": secret_key,
+                "response": token,
+                "remoteip": _client_ip(request) or "",
+            },
+            timeout=10,
+        )
+        if not response.ok:
+            return False, f"siteverify-{response.status_code}"
+        result = response.json()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("siteverify 请求失败: %s", exc)
+        return False, "siteverify-error"
+
+    if not result.get("success"):
+        codes = result.get("error-codes") or ["unknown"]
+        logger.warning("Turnstile 校验失败: %s", codes)
+        return False, codes[0]
+
+    if action and result.get("action") not in (None, "", action):
+        return False, "action-mismatch"
+    if result.get("hostname") and result["hostname"] not in hostnames:
+        logger.warning("Turnstile hostname 不符: %s", result.get("hostname"))
+        return False, "hostname-mismatch"
+
+    return True, None
 
 
 def _extract_words(full_text):
@@ -213,8 +266,9 @@ def work_redirect(request, work_id):
 def api_get_gloss(request):
     if getattr(settings, "TURNSTILE_ENABLED", True):
         cf_token = request.GET.get('cf_token')
-        if not cf_token or not verify_captcha(cf_token):
-            return JsonResponse({'error': 'Captcha verification failed.'}, status=403)
+        ok, reason = verify_captcha(cf_token, request=request)
+        if not ok:
+            return JsonResponse({'error': '人机验证未通过，请刷新页面重试。', 'reason': reason}, status=403)
 
     work_id = request.GET.get('work_id')
     path = request.GET.get('path')
@@ -227,6 +281,15 @@ def api_get_gloss(request):
         full_text = " ".join([s.text for s in segments])
         full_text = re.sub(r'(?<=\w)\s+(?=[.,!?;:])', '', full_text)
         gloss_data, _ = get_or_create_gloss(full_text)
-        return JsonResponse({'status': 'success', 'work_id': work_id, 'path': path, 'gloss': gloss_data})
-    except Exception as e:
-        return JsonResponse({'error': f'Internal server error {str(e)}'}, status=500)
+        missing = sum(1 for item in gloss_data if not item.get('m'))
+        return JsonResponse({
+            'status': 'success' if missing == 0 else 'partial',
+            'work_id': work_id,
+            'path': path,
+            'gloss': gloss_data,
+            'missing': missing,
+            'total': len(gloss_data),
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.exception("生成标注失败")
+        return JsonResponse({'error': '标注服务暂时不可用，请稍后重试。'}, status=500)
